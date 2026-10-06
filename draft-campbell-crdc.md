@@ -380,6 +380,10 @@ When used with presentation protocols that negotiate credential formats (such as
 
 When a Verifier includes a `-cr` format identifier in its presentation request (or indicates support for conditional release), a Credential Manager holding a credential that requires conditional release returns the CRDC JSON envelope defined in {{crdc-envelope}}.
 
+In addition to normal `vp_format_supported` metadata for the credential format, the Verifier MAY include the following member:
+
+`credential_release_enc_values_supported`: An OPTIONAL non-empty JSON array of strings listing the JWE enc algorithm values [RFC7518] supported by the Verifier for decrypting a releasable_credential. Defaults to ["A256GCM"] when omitted.
+
 # Protocol Flow and Processing Rules {#protocol-flow}
 
 ## Issuance and Key Discovery {#issuance-flow}
