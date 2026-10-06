@@ -1,0 +1,2486 @@
+<!DOCTYPE html>
+<html lang="en" class="Internet-Draft">
+<head>
+<meta charset="utf-8">
+<meta content="Common,Latin" name="scripts">
+<meta content="initial-scale=1.0" name="viewport">
+<title>Conditionally Released Digital Credentials</title>
+<meta content="Lee Campbell" name="author">
+<meta content="
+       Digital Credentials (DCs), such as Selective Disclosure for JSON Web Tokens (SD-JWTs) and ISO/IEC 18013-5 mobile documents (mdocs), are issued by Issuers to Credential Managers (wallets) held by Holders. Verifiers can then request these credentials from the Credential Manager using presentation protocols such as OpenID for Verifiable Presentations (OpenID4VP) and browser APIs such as the W3C Digital Credentials API. A foundational privacy property of this three-party model is Issuer unlinkability: the Issuer does not learn when, where, or to which Verifier a given credential is presented. However, in many commercial and regulatory ecosystems, Issuers require a mechanism to charge or authorize Verifiers for credential presentations. 
+       This specification defines a credential-format-agnostic mechanism for Conditionally Released Digital Credentials (CRDCs). During presentation, the Credential Manager encrypts a standard Digital Credential presentation using a one-time ephemeral Content Encryption Key (CEK) to produce a Releasable Credential, and encrypts the CEK under an Issuer Release Public Key alongside Issuer routing metadata to produce a Release Token. The Verifier presents the Release Token to the Issuer's Release Endpoint to authorize (and optionally bill for) the presentation and obtain the decrypted CEK, which the Verifier then uses to decrypt and validate the underlying Digital Credential—all while strictly preserving the privacy property that the Issuer never learns which Holder is presenting the credential. 
+    " name="description">
+<meta content="xml2rfc 3.34.1" name="generator">
+<meta content="Digital Credentials" name="keyword">
+<meta content="SD-JWT" name="keyword">
+<meta content="mdoc" name="keyword">
+<meta content="OpenID4VP" name="keyword">
+<meta content="Conditional Release" name="keyword">
+<meta content="Privacy" name="keyword">
+<meta content="Unlinkability" name="keyword">
+<meta content="draft-campbell-crdc-00" name="ietf.draft">
+<!-- Generator version information:
+  xml2rfc 3.34.1
+    Python 3.12.14
+    ConfigArgParse 1.8.0
+    google-i18n-address 3.1.1
+    intervaltree 3.2.1
+    Jinja2 3.1.6
+    lxml 6.1.3
+    natsort 8.4.0
+    platformdirs 4.12.3
+    pycountry 26.2.16
+    PyYAML 6.0.3
+    requests 2.34.2
+    wcwidth 0.9.2
+-->
+<link href="draft-campbell-crdc-00.xml" rel="alternate" type="application/rfc+xml">
+<link href="#copyright" rel="license">
+<style type="text/css">/*
+
+  NOTE: Changes at the bottom of this file overrides some earlier settings.
+
+  Once the style has stabilized and has been adopted as an official RFC style,
+  this can be consolidated so that style settings occur only in one place, but
+  for now the contents of this file consists first of the initial CSS work as
+  provided to the RFC Formatter (xml2rfc) work, followed by itemized and
+  commented changes found necessary during the development of the v3
+  formatters.
+
+*/
+
+/* fonts */
+@import url('https://static.ietf.org/fonts/noto-sans/import.css'); /* Sans-serif */
+@import url('https://static.ietf.org/fonts/noto-serif/import.css'); /* Serif (print) */
+@import url('https://static.ietf.org/fonts/roboto-mono/import.css'); /* Monospace */
+
+:root {
+  --font-sans: 'Noto Sans', Arial, Helvetica, sans-serif;
+  --font-serif: 'Noto Serif', 'Times', 'Times New Roman', serif;
+  --font-mono: 'Roboto Mono', Courier, 'Courier New', monospace;
+}
+
+@viewport {
+  zoom: 1.0;
+}
+@-ms-viewport {
+  width: extend-to-zoom;
+  zoom: 1.0;
+}
+/* general and mobile first */
+html {
+}
+body {
+  max-width: 90%;
+  margin: 1.5em auto;
+  color: #222;
+  background-color: #fff;
+  font-size: 14px;
+  font-family: var(--font-sans);
+  line-height: 1.6;
+  scroll-behavior: smooth;
+  overflow-wrap: break-word;
+}
+.ears {
+  display: none;
+}
+
+/* headings */
+#title, h1, h2, h3, h4, h5, h6 {
+  margin: 1em 0 0.5em;
+  font-weight: bold;
+  line-height: 1.3;
+}
+#title {
+  clear: both;
+  border-bottom: 1px solid #ddd;
+  margin: 0 0 0.5em 0;
+  padding: 1em 0 0.5em;
+}
+.author {
+  padding-bottom: 4px;
+}
+h1 {
+  font-size: 26px;
+  margin: 1em 0;
+}
+h2 {
+  font-size: 22px;
+  margin-top: -20px;  /* provide offset for in-page anchors */
+  padding-top: 33px;
+}
+h3 {
+  font-size: 18px;
+  margin-top: -36px;  /* provide offset for in-page anchors */
+  padding-top: 42px;
+}
+h4 {
+  font-size: 16px;
+  margin-top: -36px;  /* provide offset for in-page anchors */
+  padding-top: 42px;
+}
+h5, h6 {
+  font-size: 14px;
+}
+#n-copyright-notice {
+  border-bottom: 1px solid #ddd;
+  padding-bottom: 1em;
+  margin-bottom: 1em;
+}
+/* general structure */
+p {
+  padding: 0;
+  margin: 0 0 1em 0;
+  text-align: left;
+}
+div, span {
+  position: relative;
+}
+div {
+  margin: 0;
+}
+.alignRight.art-text {
+  background-color: #f9f9f9;
+  border: 1px solid #eee;
+  border-radius: 3px;
+  padding: 1em 1em 0;
+  margin-bottom: 1.5em;
+}
+.alignRight.art-text pre {
+  padding: 0;
+}
+.alignRight {
+  margin: 1em 0;
+}
+.alignRight > *:first-child {
+  border: none;
+  margin: 0;
+  float: right;
+  clear: both;
+}
+.alignRight > *:nth-child(2) {
+  clear: both;
+  display: block;
+  border: none;
+}
+svg {
+  display: block;
+}
+@media print {
+  svg {
+    max-height: 850px;
+    max-width: 660px;
+  }
+}
+svg[font-family~="serif" i], svg [font-family~="serif" i] {
+  font-family: var(--font-serif);
+}
+svg[font-family~="sans-serif" i], svg [font-family~="sans-serif" i] {
+  font-family: var(--font-sans);
+}
+svg[font-family~="monospace" i], svg [font-family~="monospace" i] {
+  font-family: var(--font-mono);
+}
+.alignCenter.art-text {
+  background-color: #f9f9f9;
+  border: 1px solid #eee;
+  border-radius: 3px;
+  padding: 1em 1em 0;
+  margin-bottom: 1.5em;
+}
+.alignCenter.art-text pre {
+  padding: 0;
+}
+.alignCenter {
+  margin: 1em 0;
+}
+.alignCenter > *:first-child {
+  display: table;
+  border: none;
+  margin: 0 auto;
+}
+
+/* lists */
+ol, ul {
+  padding: 0;
+  margin: 0 0 1em 2em;
+}
+ol ol, ul ul, ol ul, ul ol {
+  margin-left: 1em;
+}
+li {
+  margin: 0 0 0.25em 0;
+}
+.ulCompact li {
+  margin: 0;
+}
+ul.empty, .ulEmpty {
+  list-style-type: none;
+}
+ul.empty li, .ulEmpty li {
+  margin-top: 0.5em;
+}
+ul.ulBare, li.ulBare {
+  margin-left: 0em !important;
+}
+ul.compact, .ulCompact,
+ol.compact, .olCompact {
+  line-height: 100%;
+  margin: 0 0 0 2em;
+}
+
+/* definition lists */
+dl {
+}
+dl > dt {
+  float: left;
+  margin-right: 1em;
+}
+/* 
+dl.nohang > dt {
+  float: none;
+}
+*/
+dl > dd {
+  margin-bottom: .8em;
+  min-height: 1.3em;
+}
+dl.compact > dd, .dlCompact > dd {
+  margin-bottom: 0em;
+}
+dl > dd > dl {
+  margin-top: 0.5em;
+  margin-bottom: 0em;
+}
+
+/* links */
+a {
+  text-decoration: none;
+}
+a[href] {
+  color: #22e; /* Arlen: WCAG 2019 */
+}
+a[href]:hover {
+  background-color: #f2f2f2;
+}
+figcaption a[href],
+a[href].selfRef {
+  color: #222;
+}
+/* XXX probably not this:
+a.selfRef:hover {
+  background-color: transparent;
+  cursor: default;
+} */
+
+/* Figures */
+tt, code, pre {
+  background-color: #f9f9f9;
+  font-family: var(--font-mono);
+}
+pre {
+  border: 1px solid #eee;
+  margin: 0;
+  padding: 1em;
+}
+img {
+  max-width: 100%;
+}
+figure {
+  margin: 0;
+}
+figure blockquote {
+  margin: 0.8em 0.4em 0.4em;
+}
+figcaption {
+  font-style: italic;
+  margin: 0 0 1em 0;
+}
+@media screen {
+  pre {
+    overflow-x: auto;
+    max-width: 100%;
+    max-width: calc(100% - 22px);
+  }
+}
+
+/* aside, blockquote */
+aside, blockquote {
+  margin-left: 0;
+  padding: 1.2em 2em;
+}
+blockquote {
+  background-color: #f9f9f9;
+  color: #111; /* Arlen: WCAG 2019 */
+  border: 1px solid #ddd;
+  border-radius: 3px;
+  margin: 1em 0;
+}
+blockquote > *:last-child {
+  margin-bottom: 0;
+}
+cite {
+  display: block;
+  text-align: right;
+  font-style: italic;
+}
+.xref {
+  overflow-wrap: normal;
+}
+
+/* tables */
+table {
+  width: 100%;
+  margin: 0 0 1em;
+  border-collapse: collapse;
+  border: 1px solid #eee;
+}
+th, td {
+  text-align: left;
+  vertical-align: top;
+  padding: 0.5em 0.75em;
+}
+th {
+  text-align: left;
+  background-color: #e9e9e9;
+}
+tr:nth-child(2n+1) > td {
+  background-color: #f5f5f5;
+}
+table caption {
+  font-style: italic;
+  margin: 0;
+  padding: 0;
+  text-align: left;
+}
+table p {
+  /* XXX to avoid bottom margin on table row signifiers. If paragraphs should
+     be allowed within tables more generally, it would be far better to select on a class. */
+  margin: 0;
+}
+sub,
+sup {
+ white-space: nowrap;
+}
+
+/* pilcrow */
+a.pilcrow {
+  color: #666; /* Arlen: AHDJ 2019 */
+  text-decoration: none;
+  visibility: hidden;
+  user-select: none;
+  -ms-user-select: none;
+  -o-user-select:none;
+  -moz-user-select: none;
+  -khtml-user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+@media screen {
+  aside:hover > a.pilcrow,
+  p:hover > a.pilcrow,
+  blockquote:hover > a.pilcrow,
+  div:hover > a.pilcrow,
+  li:hover > a.pilcrow,
+  pre:hover > a.pilcrow {
+    visibility: visible;
+  }
+  a.pilcrow:hover {
+    background-color: transparent;
+  }
+}
+
+/* misc */
+hr {
+  border: 0;
+  border-top: 1px solid #eee;
+}
+.bcp14 {
+  font-variant: small-caps;
+}
+
+.role {
+  font-variant: all-small-caps;
+}
+
+/* info block */
+#identifiers {
+  margin: 0;
+  font-size: 0.9em;
+}
+#identifiers dt {
+  width: 3em;
+  clear: left;
+}
+#identifiers dd {
+  float: left;
+  margin-bottom: 0;
+}
+/* Fix PDF info block run off issue */
+@media print {
+  #identifiers dd {
+    max-width: 100%;
+  }
+}
+#identifiers .authors .author {
+  display: inline-block;
+  margin-right: 1.5em;
+}
+#identifiers .authors .org {
+  font-style: italic;
+}
+
+/* The prepared/rendered info at the very bottom of the page */
+.docInfo {
+  color: #666; /* Arlen: WCAG 2019 */
+  font-size: 0.9em;
+  font-style: italic;
+  margin-top: 2em;
+}
+.docInfo .prepared {
+  float: left;
+}
+.docInfo .prepared {
+  float: right;
+}
+
+/* table of contents */
+#toc  {
+  padding: 0.75em 0 2em 0;
+  margin-bottom: 1em;
+}
+nav.toc ul {
+  margin: 0 0.5em 0 0;
+  padding: 0;
+  list-style: none;
+}
+nav.toc li {
+  line-height: 1.3em;
+  margin: 0.75em 0;
+  padding-left: 1.2em;
+  text-indent: -1.2em;
+}
+/* references */
+.references dt {
+  text-align: right;
+  font-weight: bold;
+  min-width: 7em;
+}
+.references dd {
+  margin-left: 8em;
+  overflow: auto;
+}
+
+.refInstance {
+  margin-bottom: 1.25em;
+}
+
+.refSubseries {
+  margin-bottom: 1.25em;
+}
+
+.references .ascii {
+  margin-bottom: 0.25em;
+}
+
+/* index */
+.index ul {
+  margin: 0 0 0 1em;
+  padding: 0;
+  list-style: none;
+}
+.index ul ul {
+  margin: 0;
+}
+.index li {
+  margin: 0;
+  text-indent: -2em;
+  padding-left: 2em;
+  padding-bottom: 5px;
+}
+.indexIndex {
+  margin: 0.5em 0 1em;
+}
+.index a {
+  font-weight: 700;
+}
+/* make the index two-column on all but the smallest screens */
+@media (min-width: 600px) {
+  .index ul {
+    -moz-column-count: 2;
+    -moz-column-gap: 20px;
+  }
+  .index ul ul {
+    -moz-column-count: 1;
+    -moz-column-gap: 0;
+  }
+}
+
+/* authors */
+address.vcard {
+  font-style: normal;
+  margin: 1em 0;
+}
+
+address.vcard .nameRole {
+  font-weight: 700;
+  margin-left: 0;
+}
+address.vcard .label {
+  font-family: var(--font-sans);
+  margin: 0.5em 0;
+}
+address.vcard .type {
+  display: none;
+}
+.alternative-contact {
+  margin: 1.5em 0 1em;
+}
+hr.addr {
+  border-top: 1px dashed;
+  margin: 0;
+  color: #ddd;
+  max-width: calc(100% - 16px);
+}
+
+/* temporary notes */
+.rfcEditorRemove::before {
+  position: absolute;
+  top: 0.2em;
+  right: 0.2em;
+  padding: 0.2em;
+  content: "The RFC Editor will remove this note";
+  color: #9e2a00; /* Arlen: WCAG 2019 */
+  background-color: #ffd; /* Arlen: WCAG 2019 */
+}
+.rfcEditorRemove {
+  position: relative;
+  padding-top: 1.8em;
+  background-color: #ffd; /* Arlen: WCAG 2019 */
+  border-radius: 3px;
+}
+.cref {
+  background-color: #ffd; /* Arlen: WCAG 2019 */
+  padding: 2px 4px;
+}
+.crefSource {
+  font-style: italic;
+}
+/* alternative layout for smaller screens */
+@media screen and (max-width: 1023px) {
+  body {
+    padding-top: 2em;
+  }
+  #title {
+    padding: 1em 0;
+  }
+  h1 {
+    font-size: 24px;
+  }
+  h2 {
+    font-size: 20px;
+    margin-top: -18px;  /* provide offset for in-page anchors */
+    padding-top: 38px;
+  }
+  #identifiers dd {
+    max-width: 60%;
+  }
+  #toc {
+    position: fixed;
+    z-index: 2;
+    top: 0;
+    right: 0;
+    padding: 0;
+    margin: 0;
+    background-color: inherit;
+    border-bottom: 1px solid #ccc;
+  }
+  #toc h2 {
+    margin: -1px 0 0 0;
+    padding: 4px 0 4px 6px;
+    padding-right: 1em;
+    min-width: 190px;
+    font-size: 1.1em;
+    text-align: right;
+    background-color: #444;
+    color: white;
+    cursor: pointer;
+  }
+  #toc h2::before { /* css hamburger */
+    float: right;
+    position: relative;
+    width: 1em;
+    height: 1px;
+    left: -164px;
+    margin: 6px 0 0 0;
+    background: white none repeat scroll 0 0;
+    box-shadow: 0 4px 0 0 white, 0 8px 0 0 white;
+    content: "";
+  }
+  #toc nav {
+    display: none;
+    padding: 0.5em 1em 1em;
+    overflow: auto;
+    height: calc(100vh - 48px);
+    border-left: 1px solid #ddd;
+  }
+}
+
+/* alternative layout for wide screens */
+@media screen and (min-width: 1024px) {
+  body {
+    max-width: 724px;
+    margin: 42px auto;
+    padding-left: 1.5em;
+    padding-right: 29em;
+  }
+  #toc {
+    position: fixed;
+    top: 42px;
+    right: 42px;
+    width: 25%;
+    margin: 0;
+    padding: 0 1em;
+    z-index: 1;
+  }
+  #toc h2 {
+    border-top: none;
+    border-bottom: 1px solid #ddd;
+    font-size: 1em;
+    font-weight: normal;
+    margin: 0;
+    padding: 0.25em 1em 1em 0;
+  }
+  #toc nav {
+    display: block;
+    height: calc(90vh - 84px);
+    bottom: 0;
+    padding: 0.5em 0 0;
+    overflow: auto;
+  }
+  img { /* future proofing */
+    max-width: 100%;
+    height: auto;
+  }
+}
+
+/* pagination */
+@media print {
+  body {
+    width: 100%;
+  }
+  p {
+    orphans: 3;
+    widows: 3;
+  }
+  #n-copyright-notice {
+    border-bottom: none;
+  }
+  #toc, #n-introduction {
+    page-break-before: always;
+  }
+  #toc {
+    border-top: none;
+    padding-top: 0;
+  }
+  figure, pre {
+    page-break-inside: avoid;
+  }
+  figure {
+    overflow: scroll;
+  }
+  .breakable pre {
+    break-inside: auto;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    page-break-after: avoid;
+  }
+  h2+*, h3+*, h4+*, h5+*, h6+* {
+    page-break-before: avoid;
+  }
+  pre {
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    font-size: 10pt;
+  }
+  table {
+    border: 1px solid #ddd;
+  }
+  td {
+    border-top: 1px solid #ddd;
+  }
+}
+
+/* This is commented out here, as the string-set: doesn't
+   pass W3C validation currently */
+/*
+.ears thead .left {
+  string-set: ears-top-left content();
+}
+
+.ears thead .center {
+  string-set: ears-top-center content();
+}
+
+.ears thead .right {
+  string-set: ears-top-right content();
+}
+
+.ears tfoot .left {
+  string-set: ears-bottom-left content();
+}
+
+.ears tfoot .center {
+  string-set: ears-bottom-center content();
+}
+
+.ears tfoot .right {
+  string-set: ears-bottom-right content();
+}
+*/
+
+@page :first {
+  padding-top: 0;
+  @top-left {
+    content: normal;
+    border: none;
+  }
+  @top-center {
+    content: normal;
+    border: none;
+  }
+  @top-right {
+    content: normal;
+    border: none;
+  }
+}
+
+@page {
+  size: A4;
+  margin-bottom: 45mm;
+  padding-top: 20px;
+  /* The following is commented out here, but set appropriately by in code, as
+     the content depends on the document */
+  /*
+  @top-left {
+    content: 'Internet-Draft';
+    vertical-align: bottom;
+    border-bottom: solid 1px #ccc;
+  }
+  @top-left {
+    content: string(ears-top-left);
+    vertical-align: bottom;
+    border-bottom: solid 1px #ccc;
+  }
+  @top-center {
+    content: string(ears-top-center);
+    vertical-align: bottom;
+    border-bottom: solid 1px #ccc;
+  }
+  @top-right {
+    content: string(ears-top-right);
+    vertical-align: bottom;
+    border-bottom: solid 1px #ccc;
+  }
+  @bottom-left {
+    content: string(ears-bottom-left);
+    vertical-align: top;
+    border-top: solid 1px #ccc;
+  }
+  @bottom-center {
+    content: string(ears-bottom-center);
+    vertical-align: top;
+    border-top: solid 1px #ccc;
+  }
+  @bottom-right {
+      content: '[Page ' counter(page) ']';
+      vertical-align: top;
+      border-top: solid 1px #ccc;
+  }
+  */
+
+}
+
+/* Changes introduced to fix issues found during implementation */
+/* Make sure links are clickable even if overlapped by following H* */
+a {
+  z-index: 2;
+}
+/* Separate body from document info even without intervening H1 */
+section {
+  clear: both;
+}
+
+
+/* Top align author divs, to avoid names without organization dropping level with org names */
+.author {
+  vertical-align: top;
+}
+
+/* Leave room in document info to show Internet-Draft on one line */
+#identifiers dt {
+  width: 8em;
+}
+
+/* Don't waste quite as much whitespace between label and value in doc info */
+#identifiers dd {
+  margin-left: 1em;
+}
+
+/* Give floating toc a background color (needed when it's a div inside section */
+#toc {
+  background-color: white;
+}
+
+/* Make the collapsed ToC header render white on gray also when it's a link */
+@media screen and (max-width: 1023px) {
+  #toc h2 a,
+  #toc h2 a:link,
+  #toc h2 a:focus,
+  #toc h2 a:hover,
+  #toc a.toplink,
+  #toc a.toplink:hover {
+    color: white;
+    background-color: #444;
+    text-decoration: none;
+  }
+}
+
+/* Give the bottom of the ToC some whitespace */
+@media screen and (min-width: 1024px) {
+  #toc {
+    padding: 0 0 1em 1em;
+  }
+}
+
+/* Style section numbers with more space between number and title */
+.section-number {
+  padding-right: 0.5em;
+}
+
+/* prevent monospace from becoming overly large */
+tt, code, pre {
+  font-size: 95%;
+}
+
+/* Fix the height/width aspect for ascii art*/
+.sourcecode pre,
+.art-text pre {
+  line-height: 1.12;
+}
+
+
+/* Add styling for a link in the ToC that points to the top of the document */
+a.toplink {
+  float: right;
+  margin-right: 0.5em;
+}
+
+/* Fix the dl styling to match the RFC 7992 attributes */
+dl > dt,
+dl.dlParallel > dt {
+  float: left;
+  margin-right: 1em;
+}
+dl.dlNewline > dt {
+  float: none;
+}
+
+/* Provide styling for table cell text alignment */
+table td.text-left,
+table th.text-left {
+  text-align: left;
+}
+table td.text-center,
+table th.text-center {
+  text-align: center;
+}
+table td.text-right,
+table th.text-right {
+  text-align: right;
+}
+
+/* Make the alternative author contact information look less like just another
+   author, and group it closer with the primary author contact information */
+.alternative-contact {
+  margin: 0.5em 0 0.25em 0;
+}
+address .non-ascii {
+  margin: 0 0 0 2em;
+}
+
+/* With it being possible to set tables with alignment
+  left, center, and right, { width: 100%; } does not make sense */
+table {
+  width: auto;
+}
+
+/* Avoid reference text that sits in a block with very wide left margin,
+   because of a long floating dt label.*/
+.references dd {
+  overflow: visible;
+}
+
+/* Control caption placement */
+caption {
+  caption-side: bottom;
+}
+
+/* Limit the width of the author address vcard, so names in right-to-left
+   script don't end up on the other side of the page. */
+
+address.vcard {
+  max-width: 30em;
+  margin-right: auto;
+}
+
+/* For address alignment dependent on LTR or RTL scripts */
+address div.left {
+  text-align: left;
+}
+address div.right {
+  text-align: right;
+}
+
+/* Provide table alignment support.  We can't use the alignX classes above
+   since they do unwanted things with caption and other styling. */
+table.right {
+ margin-left: auto;
+ margin-right: 0;
+}
+table.center {
+ margin-left: auto;
+ margin-right: auto;
+}
+table.left {
+ margin-left: 0;
+ margin-right: auto;
+}
+
+/* Give the table caption label the same styling as the figcaption */
+caption a[href] {
+  color: #222;
+}
+
+@media print {
+  .toplink {
+    display: none;
+  }
+
+  /* avoid overwriting the top border line with the ToC header */
+  #toc {
+    padding-top: 1px;
+  }
+
+  /* Avoid page breaks inside dl and author address entries */
+  .vcard {
+    page-break-inside: avoid;
+  }
+
+}
+/* Tweak the bcp14 keyword presentation */
+.bcp14 {
+  font-variant: small-caps;
+  font-weight: bold;
+  font-size: 0.9em;
+}
+/* Tweak the invisible space above H* in order not to overlay links in text above */
+ h2 {
+  margin-top: -18px;  /* provide offset for in-page anchors */
+  padding-top: 31px;
+ }
+ h3 {
+  margin-top: -18px;  /* provide offset for in-page anchors */
+  padding-top: 24px;
+ }
+ h4 {
+  margin-top: -18px;  /* provide offset for in-page anchors */
+  padding-top: 24px;
+ }
+/* Float artwork pilcrow to the right */
+@media screen {
+  .artwork a.pilcrow {
+    display: block;
+    line-height: 0.7;
+    margin-top: 0.15em;
+  }
+}
+/* Make pilcrows on dd visible */
+@media screen {
+  dd:hover > a.pilcrow {
+    visibility: visible;
+  }
+}
+/* Make the placement of figcaption match that of a table's caption
+   by removing the figure's added bottom margin */
+.alignLeft.art-text,
+.alignCenter.art-text,
+.alignRight.art-text {
+   margin-bottom: 0;
+}
+.alignLeft,
+.alignCenter,
+.alignRight {
+  margin: 1em 0 0 0;
+}
+/* In print, the pilcrow won't show on hover, so prevent it from taking up space,
+   possibly even requiring a new line */
+@media print {
+  a.pilcrow {
+    display: none;
+  }
+}
+/* Styling for the external metadata */
+div#external-metadata {
+  background-color: #eee;
+  padding: 0.5em;
+  margin-bottom: 0.5em;
+  display: none;
+}
+div#internal-metadata {
+  padding: 0.5em;                       /* to match the external-metadata padding */
+}
+/* Styling for title RFC Number */
+h1#rfcnum {
+  clear: both;
+  margin: 0 0 -1em;
+  padding: 1em 0 0 0;
+}
+/* Make .olPercent look the same as <ol><li> */
+dl.olPercent > dd {
+  margin-bottom: 0.25em;
+  min-height: initial;
+}
+/* Give aside some styling to set it apart */
+aside {
+  border-left: 1px solid #ddd;
+  margin: 1em 0 1em 2em;
+  padding: 0.2em 2em;
+}
+aside > dl,
+aside > ol,
+aside > ul,
+aside > table,
+aside > p {
+  margin-bottom: 0.5em;
+}
+/* Additional page break settings */
+@media print {
+  figcaption, table caption {
+    page-break-before: avoid;
+  }
+  table {
+    page-break-inside: avoid;
+  }
+}
+/* Font size adjustments for print */
+@media print {
+  body  { font-size: 10pt;      line-height: normal; max-width: 96%; }
+  h1    { font-size: 1.72em;    padding-top: 1.5em; } /* 1*1.2*1.2*1.2 */
+  h2    { font-size: 1.44em;    padding-top: 1.5em; } /* 1*1.2*1.2 */
+  h3    { font-size: 1.2em;     padding-top: 1.5em; } /* 1*1.2 */
+  h4    { font-size: 1em;       padding-top: 1.5em; }
+  h5, h6 { font-size: 1em;      margin: initial; padding: 0.5em 0 0.3em; }
+}
+/* Sourcecode margin in print, when there's no pilcrow */
+@media print {
+  .artwork,
+  .artwork > pre,
+  .sourcecode {
+    margin-bottom: 1em;
+  }
+}
+/* Avoid narrow tables forcing too narrow table captions, which may render badly */
+table {
+  min-width: 20em;
+}
+/* ol type a */
+ol.type-a { list-style-type: lower-alpha; }
+ol.type-A { list-style-type: upper-alpha; }
+ol.type-i { list-style-type: lower-roman; }
+ol.type-I { list-style-type: upper-roman; }
+/* Apply the print table and row borders in general, on request from the RPC,
+and increase the contrast between border and odd row background slightly */
+table {
+  border: 1px solid #ddd;
+}
+td {
+  border-top: 1px solid #ddd;
+}
+tr {
+  break-inside: avoid;
+}
+tr:nth-child(2n+1) > td {
+  background-color: #f8f8f8;
+}
+/* Use style rules to govern display of the TOC. */
+@media screen and (max-width: 1023px) {
+  #toc nav { display: none; }
+  #toc.active nav { display: block; }
+}
+/* Add support for keepWithNext */
+.keepWithNext {
+  break-after: avoid-page;
+  break-after: avoid-page;
+}
+/* Add support for keepWithPrevious */
+.keepWithPrevious {
+  break-before: avoid-page;
+}
+/* Change the approach to avoiding breaks inside artwork etc. */
+figure, pre, table, .artwork, .sourcecode  {
+  break-before: auto;
+  break-after: auto;
+}
+/* Avoid breaks between <dt> and <dd> */
+dl {
+  break-before: auto;
+  break-inside: auto;
+}
+dt {
+  break-before: auto;
+  break-after: avoid-page;
+}
+dd {
+  break-before: avoid-page;
+  break-after: auto;
+  orphans: 3;
+  widows: 3
+}
+span.break, dd.break {
+  margin-bottom: 0;
+  min-height: 0;
+  break-before: auto;
+  break-inside: auto;
+  break-after: auto;
+}
+/* Undo break-before ToC */
+@media print {
+  #toc {
+    break-before: auto;
+  }
+}
+/* Text in compact lists should not get extra bottom margin space,
+   since that would makes the list not compact */
+ul.compact p, .ulCompact p,
+ol.compact p, .olCompact p {
+ margin: 0;
+}
+/* But the list as a whole needs the extra space at the end */
+section ul.compact,
+section .ulCompact,
+section ol.compact,
+section .olCompact {
+  margin-bottom: 1em;                    /* same as p not within ul.compact etc. */
+}
+/* The tt and code background above interferes with for instance table cell
+   backgrounds.  Changed to something a bit more selective. */
+tt, code {
+  background-color: transparent;
+}
+p tt, p code, li tt, li code, dt tt, dt code {
+  background-color: #f8f8f8;
+}
+/* Tweak the pre margin -- 0px doesn't come out well */
+pre {
+   margin-top: 0.5px;
+}
+/* Tweak the compact list text */
+ul.compact, .ulCompact,
+ol.compact, .olCompact,
+dl.compact, .dlCompact {
+  line-height: normal;
+}
+/* Don't add top margin for nested lists */
+li > ul, li > ol, li > dl,
+dd > ul, dd > ol, dd > dl,
+dl > dd > dl {
+  margin-top: initial;
+}
+/* Elements that should not be rendered on the same line as a <dt> */
+/* This should match the element list in writer.text.TextWriter.render_dl() */
+dd > div.artwork:first-child,
+dd > aside:first-child,
+dd > blockquote:first-child,
+dd > figure:first-child,
+dd > ol:first-child,
+dd > div.sourcecode:first-child,
+dd > table:first-child,
+dd > ul:first-child {
+  clear: left;
+}
+/* fix for weird browser behaviour when <dd/> is empty */
+dt+dd:empty::before{
+  content: "\00a0";
+}
+/* Make paragraph spacing inside <li> smaller than in body text, to fit better within the list */
+li > p {
+  margin-bottom: 0.5em
+}
+/* Don't let p margin spill out from inside list items */
+li > p:last-of-type:only-child {
+  margin-bottom: 0;
+}
+</style>
+<link href="rfc-local.css" rel="stylesheet" type="text/css">
+<script type="application/javascript">async function addMetadata(){try{const e=document.styleSheets[0].cssRules;for(let t=0;t<e.length;t++)if(/#identifiers/.exec(e[t].selectorText)){const a=e[t].cssText.replace("#identifiers","#external-updates");document.styleSheets[0].insertRule(a,document.styleSheets[0].cssRules.length)}}catch(e){console.log(e)}const e=document.getElementById("external-metadata");if(e)try{var t,a="",o=function(e){const t=document.getElementsByTagName("meta");for(let a=0;a<t.length;a++)if(t[a].getAttribute("name")===e)return t[a].getAttribute("content");return""}("rfc.number");if(o){t="https://www.rfc-editor.org/rfc/rfc"+o+".json";try{const e=await fetch(t);a=await e.json()}catch(e){t=document.URL.indexOf("html")>=0?document.URL.replace(/html$/,"json"):document.URL+".json";const o=await fetch(t);a=await o.json()}}if(!a)return;e.style.display="block";const s="",d="https://datatracker.ietf.org/doc",n="https://datatracker.ietf.org/ipr/search",c="https://www.rfc-editor.org/info",l=a.doc_id.toLowerCase(),i=a.doc_id.slice(0,3).toLowerCase(),f=a.doc_id.slice(3).replace(/^0+/,""),u={status:"Status",obsoletes:"Obsoletes",obsoleted_by:"Obsoleted By",updates:"Updates",updated_by:"Updated By",see_also:"See Also",errata_url:"Errata"};let h="<dl style='overflow:hidden' id='external-updates'>";["status","obsoletes","obsoleted_by","updates","updated_by","see_also","errata_url"].forEach(e=>{if("status"==e){a[e]=a[e].toLowerCase();var t=a[e].split(" "),o=t.length,w="",p=1;for(let e=0;e<o;e++)p<o?w=w+r(t[e])+" ":w+=r(t[e]),p++;a[e]=w}else if("obsoletes"==e||"obsoleted_by"==e||"updates"==e||"updated_by"==e){var g,m="",b=1;g=a[e].length;for(let t=0;t<g;t++)a[e][t]&&(a[e][t]=String(a[e][t]).toLowerCase(),m=b<g?m+"<a href='"+s+"/rfc/".concat(a[e][t])+"'>"+a[e][t].slice(3)+"</a>, ":m+"<a href='"+s+"/rfc/".concat(a[e][t])+"'>"+a[e][t].slice(3)+"</a>",b++);a[e]=m}else if("see_also"==e){var y,L="",C=1;y=a[e].length;for(let t=0;t<y;t++)if(a[e][t]){a[e][t]=String(a[e][t]);var _=a[e][t].slice(0,3),v=a[e][t].slice(3).replace(/^0+/,"");L=C<y?"RFC"!=_?L+"<a href='"+s+"/info/"+_.toLowerCase().concat(v.toLowerCase())+"'>"+_+" "+v+"</a>, ":L+"<a href='"+s+"/info/"+_.toLowerCase().concat(v.toLowerCase())+"'>"+v+"</a>, ":"RFC"!=_?L+"<a href='"+s+"/info/"+_.toLowerCase().concat(v.toLowerCase())+"'>"+_+" "+v+"</a>":L+"<a href='"+s+"/info/"+_.toLowerCase().concat(v.toLowerCase())+"'>"+v+"</a>",C++}a[e]=L}else if("errata_url"==e){var R="";R=a[e]?R+"<a href='"+a[e]+"'>Errata exist</a> | <a href='"+d+"/"+l+"'>Datatracker</a>| <a href='"+n+"/?"+i+"="+f+"&submit="+i+"'>IPR</a> | <a href='"+c+"/"+l+"'>Info page</a>":"<a href='"+d+"/"+l+"'>Datatracker</a> | <a href='"+n+"/?"+i+"="+f+"&submit="+i+"'>IPR</a> | <a href='"+c+"/"+l+"'>Info page</a>",a[e]=R}""!=a[e]?"Errata"==u[e]?h+=`<dt>More info:</dt><dd>${a[e]}</dd>`:h+=`<dt>${u[e]}:</dt><dd>${a[e]}</dd>`:"Errata"==u[e]&&(h+=`<dt>More info:</dt><dd>${a[e]}</dd>`)}),h+="</dl>",e.innerHTML=h}catch(e){console.log(e)}else console.log("Could not locate metadata <div> element");function r(e){return e.charAt(0).toUpperCase()+e.slice(1)}}window.removeEventListener("load",addMetadata),window.addEventListener("load",addMetadata);</script>
+</head>
+<body class="xml2rfc">
+<table class="ears">
+<thead><tr>
+<td class="left">Internet-Draft</td>
+<td class="center">CRDC</td>
+<td class="right">October 2026</td>
+</tr></thead>
+<tfoot><tr>
+<td class="left">Campbell</td>
+<td class="center">Expires 9 April 2027</td>
+<td class="right">[Page]</td>
+</tr></tfoot>
+</table>
+<div id="external-metadata" class="document-information"></div>
+<div id="internal-metadata" class="document-information">
+<dl id="identifiers">
+<dt class="label-workgroup">Workgroup:</dt>
+<dd class="workgroup">OAuth Working Group</dd>
+<dt class="label-internet-draft">Internet-Draft:</dt>
+<dd class="internet-draft">draft-campbell-crdc-00</dd>
+<dt class="label-published">Published:</dt>
+<dd class="published">
+<time datetime="2026-10-06" class="published">6 October 2026</time>
+    </dd>
+<dt class="label-intended-status">Intended Status:</dt>
+<dd class="intended-status">Standards Track</dd>
+<dt class="label-expires">Expires:</dt>
+<dd class="expires"><time datetime="2027-04-09">9 April 2027</time></dd>
+<dt class="label-authors">Author:</dt>
+<dd class="authors">
+<div class="author">
+      <div class="author-name">L. Campbell</div>
+<div class="org">Google</div>
+</div>
+</dd>
+</dl>
+</div>
+<h1 id="title">Conditionally Released Digital Credentials</h1>
+<section id="section-abstract">
+      <h2 id="abstract"><a href="#abstract" class="selfRef">Abstract</a></h2>
+<p id="section-abstract-1">Digital Credentials (DCs), such as Selective Disclosure for JSON Web Tokens (SD-JWTs) and ISO/IEC 18013-5 mobile documents (mdocs), are issued by Issuers to Credential Managers (wallets) held by Holders. Verifiers can then request these credentials from the Credential Manager using presentation protocols such as OpenID for Verifiable Presentations (OpenID4VP) and browser APIs such as the W3C Digital Credentials API. A foundational privacy property of this three-party model is Issuer unlinkability: the Issuer does not learn when, where, or to which Verifier a given credential is presented. However, in many commercial and regulatory ecosystems, Issuers require a mechanism to charge or authorize Verifiers for credential presentations.<a href="#section-abstract-1" class="pilcrow">¶</a></p>
+<p id="section-abstract-2">This specification defines a credential-format-agnostic mechanism for Conditionally Released Digital Credentials (CRDCs). During presentation, the Credential Manager encrypts a standard Digital Credential presentation using a one-time ephemeral Content Encryption Key (CEK) to produce a Releasable Credential, and encrypts the CEK under an Issuer Release Public Key alongside Issuer routing metadata to produce a Release Token. The Verifier presents the Release Token to the Issuer's Release Endpoint to authorize (and optionally bill for) the presentation and obtain the decrypted CEK, which the Verifier then uses to decrypt and validate the underlying Digital Credential—all while strictly preserving the privacy property that the Issuer never learns which Holder is presenting the credential.<a href="#section-abstract-2" class="pilcrow">¶</a></p>
+</section>
+<div id="status-of-memo">
+<section id="section-boilerplate.1">
+        <h2 id="name-status-of-this-memo">
+<a href="#name-status-of-this-memo" class="section-name selfRef">Status of This Memo</a>
+        </h2>
+<p id="section-boilerplate.1-1">
+        This Internet-Draft is submitted in full conformance with the
+        provisions of BCP 78 and BCP 79.<a href="#section-boilerplate.1-1" class="pilcrow">¶</a></p>
+<p id="section-boilerplate.1-2">
+        Internet-Drafts are working documents of the Internet Engineering Task
+        Force (IETF). Note that other groups may also distribute working
+        documents as Internet-Drafts. The list of current Internet-Drafts is
+        at <span><a href="https://datatracker.ietf.org/drafts/current/">https://datatracker.ietf.org/drafts/current/</a></span>.<a href="#section-boilerplate.1-2" class="pilcrow">¶</a></p>
+<p id="section-boilerplate.1-3">
+        Internet-Drafts are draft documents valid for a maximum of six months
+        and may be updated, replaced, or obsoleted by other documents at any
+        time. It is inappropriate to use Internet-Drafts as reference
+        material or to cite them other than as "work in progress."<a href="#section-boilerplate.1-3" class="pilcrow">¶</a></p>
+<p id="section-boilerplate.1-4">
+        This Internet-Draft will expire on 9 April 2027.<a href="#section-boilerplate.1-4" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="copyright">
+<section id="section-boilerplate.2">
+        <h2 id="name-copyright-notice">
+<a href="#name-copyright-notice" class="section-name selfRef">Copyright Notice</a>
+        </h2>
+<p id="section-boilerplate.2-1">
+            Copyright (c) 2026 IETF Trust and the persons identified as the
+            document authors. All rights reserved.<a href="#section-boilerplate.2-1" class="pilcrow">¶</a></p>
+<p id="section-boilerplate.2-2">
+            This document is subject to BCP 78 and the IETF Trust's Legal
+            Provisions Relating to IETF Documents
+            (<span><a href="https://trustee.ietf.org/license-info">https://trustee.ietf.org/license-info</a></span>) in effect on the date of
+            publication of this document. Please review these documents
+            carefully, as they describe your rights and restrictions with
+            respect to this document. Code Components extracted from this
+            document must include Revised BSD License text as described in
+            Section 4.e of the Trust Legal Provisions and are provided without
+            warranty as described in the Revised BSD License.<a href="#section-boilerplate.2-2" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="toc">
+<section id="section-toc.1">
+        <a href="#" onclick="scroll(0,0)" class="toplink">▲</a><h2 id="name-table-of-contents">
+<a href="#name-table-of-contents" class="section-name selfRef">Table of Contents</a>
+        </h2>
+<nav class="toc"><ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.1">
+            <p id="section-toc.1-1.1.1"><a href="#section-1" class="auto internal xref">1</a>.  <a href="#name-introduction" class="internal xref">Introduction</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.1.2.1">
+                <p id="section-toc.1-1.1.2.1.1" class="keepWithNext"><a href="#section-1.1" class="auto internal xref">1.1</a>.  <a href="#name-design-rationale-and-goals" class="internal xref">Design Rationale and Goals</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.1.2.2">
+                <p id="section-toc.1-1.1.2.2.1" class="keepWithNext"><a href="#section-1.2" class="auto internal xref">1.2</a>.  <a href="#name-feature-summary" class="internal xref">Feature Summary</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.1.2.3">
+                <p id="section-toc.1-1.1.2.3.1" class="keepWithNext"><a href="#section-1.3" class="auto internal xref">1.3</a>.  <a href="#name-conventions-and-terminology" class="internal xref">Conventions and Terminology</a></p>
+</li>
+            </ul>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.2">
+            <p id="section-toc.1-1.2.1"><a href="#section-2" class="auto internal xref">2</a>.  <a href="#name-architecture-and-flow-diagr" class="internal xref">Architecture and Flow Diagram</a></p>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.3">
+            <p id="section-toc.1-1.3.1"><a href="#section-3" class="auto internal xref">3</a>.  <a href="#name-concepts" class="internal xref">Concepts</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.3.2.1">
+                <p id="section-toc.1-1.3.2.1.1"><a href="#section-3.1" class="auto internal xref">3.1</a>.  <a href="#name-issuer-release-public-key-p" class="internal xref">Issuer Release Public Key Provisioning</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.3.2.2">
+                <p id="section-toc.1-1.3.2.2.1"><a href="#section-3.2" class="auto internal xref">3.2</a>.  <a href="#name-releasable-credential-and-r" class="internal xref">Releasable Credential and Release Token</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.3.2.3">
+                <p id="section-toc.1-1.3.2.3.1"><a href="#section-3.3" class="auto internal xref">3.3</a>.  <a href="#name-conditionally-released-digit" class="internal xref">Conditionally Released Digital Credential (CRDC)</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.3.2.4">
+                <p id="section-toc.1-1.3.2.4.1"><a href="#section-3.4" class="auto internal xref">3.4</a>.  <a href="#name-credential-release-redempti" class="internal xref">Credential Release Redemption and Verification</a></p>
+</li>
+            </ul>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.4">
+            <p id="section-toc.1-1.4.1"><a href="#section-4" class="auto internal xref">4</a>.  <a href="#name-data-formats-and-cryptograp" class="internal xref">Data Formats and Cryptographic Wrapper</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.4.2.1">
+                <p id="section-toc.1-1.4.2.1.1"><a href="#section-4.1" class="auto internal xref">4.1</a>.  <a href="#name-issuer-metadata-parameters" class="internal xref">Issuer Metadata Parameters</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.4.2.2">
+                <p id="section-toc.1-1.4.2.2.1"><a href="#section-4.2" class="auto internal xref">4.2</a>.  <a href="#name-releasable-credential-forma" class="internal xref">Releasable Credential Format</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.4.2.3">
+                <p id="section-toc.1-1.4.2.3.1"><a href="#section-4.3" class="auto internal xref">4.3</a>.  <a href="#name-release-token-format" class="internal xref">Release Token Format</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.4.2.3.2.1">
+                    <p id="section-toc.1-1.4.2.3.2.1.1"><a href="#section-4.3.1" class="auto internal xref">4.3.1</a>.  <a href="#name-release-token-jwe-protected" class="internal xref">Release Token JWE Protected Header</a></p>
+</li>
+                  <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.4.2.3.2.2">
+                    <p id="section-toc.1-1.4.2.3.2.2.1"><a href="#section-4.3.2" class="auto internal xref">4.3.2</a>.  <a href="#name-release-token-plaintext-pay" class="internal xref">Release Token Plaintext Payload</a></p>
+</li>
+                </ul>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.4.2.4">
+                <p id="section-toc.1-1.4.2.4.1"><a href="#section-4.4" class="auto internal xref">4.4</a>.  <a href="#name-conditionally-released-digita" class="internal xref">Conditionally Released Digital Credential (CRDC) Envelope</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.4.2.5">
+                <p id="section-toc.1-1.4.2.5.1"><a href="#section-4.5" class="auto internal xref">4.5</a>.  <a href="#name-presentation-format-identif" class="internal xref">Presentation Format Identifiers (<code>-cr</code> Suffix Convention)</a></p>
+</li>
+            </ul>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.5">
+            <p id="section-toc.1-1.5.1"><a href="#section-5" class="auto internal xref">5</a>.  <a href="#name-protocol-flow-and-processin" class="internal xref">Protocol Flow and Processing Rules</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.5.2.1">
+                <p id="section-toc.1-1.5.2.1.1"><a href="#section-5.1" class="auto internal xref">5.1</a>.  <a href="#name-issuance-and-key-discovery" class="internal xref">Issuance and Key Discovery</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.5.2.2">
+                <p id="section-toc.1-1.5.2.2.1"><a href="#section-5.2" class="auto internal xref">5.2</a>.  <a href="#name-presentation-by-the-credent" class="internal xref">Presentation by the Credential Manager</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.5.2.3">
+                <p id="section-toc.1-1.5.2.3.1"><a href="#section-5.3" class="auto internal xref">5.3</a>.  <a href="#name-release-token-redemption-ve" class="internal xref">Release Token Redemption (Verifier to Issuer)</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.5.2.4">
+                <p id="section-toc.1-1.5.2.4.1"><a href="#section-5.4" class="auto internal xref">5.4</a>.  <a href="#name-unwrapping-and-verification" class="internal xref">Unwrapping and Verification by the Verifier</a></p>
+</li>
+            </ul>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.6">
+            <p id="section-toc.1-1.6.1"><a href="#section-6" class="auto internal xref">6</a>.  <a href="#name-examples" class="internal xref">Examples</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.6.2.1">
+                <p id="section-toc.1-1.6.2.1.1"><a href="#section-6.1" class="auto internal xref">6.1</a>.  <a href="#name-issuer-metadata-example" class="internal xref">Issuer Metadata Example</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.6.2.2">
+                <p id="section-toc.1-1.6.2.2.1"><a href="#section-6.2" class="auto internal xref">6.2</a>.  <a href="#name-conditionally-released-sd-j" class="internal xref">Conditionally Released SD-JWT (<code>dc+sd-jwt-cr</code>)</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.6.2.3">
+                <p id="section-toc.1-1.6.2.3.1"><a href="#section-6.3" class="auto internal xref">6.3</a>.  <a href="#name-conditionally-released-iso-" class="internal xref">Conditionally Released ISO mdoc (<code>mso_mdoc-cr</code>)</a></p>
+</li>
+            </ul>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.7">
+            <p id="section-toc.1-1.7.1"><a href="#section-7" class="auto internal xref">7</a>.  <a href="#name-security-considerations" class="internal xref">Security Considerations</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.7.2.1">
+                <p id="section-toc.1-1.7.2.1.1"><a href="#section-7.1" class="auto internal xref">7.1</a>.  <a href="#name-ephemeral-key-entropy-and-n" class="internal xref">Ephemeral Key Entropy and Nonce Uniqueness</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.7.2.2">
+                <p id="section-toc.1-1.7.2.2.1"><a href="#section-7.2" class="auto internal xref">7.2</a>.  <a href="#name-binding-between-releasable-" class="internal xref">Binding Between Releasable Credential and Release Token</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.7.2.3">
+                <p id="section-toc.1-1.7.2.3.1"><a href="#section-7.3" class="auto internal xref">7.3</a>.  <a href="#name-inner-issuer-verification-a" class="internal xref">Inner Issuer Verification Against Outer Release Token Issuer</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.7.2.4">
+                <p id="section-toc.1-1.7.2.4.1"><a href="#section-7.4" class="auto internal xref">7.4</a>.  <a href="#name-inner-holder-key-binding" class="internal xref">Inner Holder Key Binding</a></p>
+</li>
+            </ul>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.8">
+            <p id="section-toc.1-1.8.1"><a href="#section-8" class="auto internal xref">8</a>.  <a href="#name-privacy-considerations" class="internal xref">Privacy Considerations</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.8.2.1">
+                <p id="section-toc.1-1.8.2.1.1"><a href="#section-8.1" class="auto internal xref">8.1</a>.  <a href="#name-unlinkability-against-the-i" class="internal xref">Unlinkability Against the Issuer (Shared Key Cohort Requirements)</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.8.2.2">
+                <p id="section-toc.1-1.8.2.2.1"><a href="#section-8.2" class="auto internal xref">8.2</a>.  <a href="#name-confidentiality-of-claims-a" class="internal xref">Confidentiality of Claims Against the Issuer</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.8.2.3">
+                <p id="section-toc.1-1.8.2.3.1"><a href="#section-8.3" class="auto internal xref">8.3</a>.  <a href="#name-timing-and-network-correlat" class="internal xref">Timing and Network Correlation Mitigations</a></p>
+</li>
+            </ul>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.9">
+            <p id="section-toc.1-1.9.1"><a href="#section-9" class="auto internal xref">9</a>.  <a href="#name-iana-considerations" class="internal xref">IANA Considerations</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.9.2.1">
+                <p id="section-toc.1-1.9.2.1.1"><a href="#section-9.1" class="auto internal xref">9.1</a>.  <a href="#name-oauth-authorization-server-" class="internal xref">OAuth Authorization Server / Credential Issuer Metadata Registry</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.9.2.2">
+                <p id="section-toc.1-1.9.2.2.1"><a href="#section-9.2" class="auto internal xref">9.2</a>.  <a href="#name-media-type-registration" class="internal xref">Media Type Registration</a></p>
+</li>
+            </ul>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.10">
+            <p id="section-toc.1-1.10.1"><a href="#section-10" class="auto internal xref">10</a>. <a href="#name-references" class="internal xref">References</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.10.2.1">
+                <p id="section-toc.1-1.10.2.1.1"><a href="#section-10.1" class="auto internal xref">10.1</a>.  <a href="#name-normative-references" class="internal xref">Normative References</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.10.2.2">
+                <p id="section-toc.1-1.10.2.2.1"><a href="#section-10.2" class="auto internal xref">10.2</a>.  <a href="#name-informative-references" class="internal xref">Informative References</a></p>
+</li>
+            </ul>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.11">
+            <p id="section-toc.1-1.11.1"><a href="#appendix-A" class="auto internal xref"></a><a href="#name-authors-address" class="internal xref">Author's Address</a></p>
+</li>
+        </ul>
+</nav>
+</section>
+</div>
+<div id="introduction">
+<section id="section-1">
+      <h2 id="name-introduction">
+<a href="#section-1" class="section-number selfRef">1. </a><a href="#name-introduction" class="section-name selfRef">Introduction</a>
+      </h2>
+<p id="section-1-1">In the modern digital identity ecosystem, Digital Credentials (DCs)—such as Selective Disclosure for JSON Web Tokens (SD-JWTs) <span>[<a href="#RFC9901" class="cite xref">RFC9901</a>]</span> and ISO/IEC 18013-5 mobile documents (mdocs) <span>[<a href="#ISO.18013-5" class="cite xref">ISO.18013-5</a>]</span>—are issued by Issuers to Credential Managers (commonly referred to as digital wallets) controlled by Holders. Verifiers can then request these Digital Credentials from the Holder's Credential Manager using presentation protocols such as OpenID for Verifiable Presentations <span>[<a href="#OpenID4VP" class="cite xref">OpenID4VP</a>]</span> invoked over platform and browser surfaces like the W3C Digital Credentials API <span>[<a href="#W3C.DC-API" class="cite xref">W3C.DC-API</a>]</span>.<a href="#section-1-1" class="pilcrow">¶</a></p>
+<p id="section-1-2">A core privacy tenet of this three-party model (Issuer, Holder/Credential Manager, and Verifier) is that the issuance of a credential is decoupled from its presentation. In particular, the Issuer does not participate in the presentation flow in a way that reveals the identity of the Holder to the Issuer at the time of presentation. Consequently, the Issuer does not learn which Holder is presenting their credential, nor where a specific Holder presents their credential.<a href="#section-1-2" class="pilcrow">¶</a></p>
+<p id="section-1-3">At the same time, certain high-value credential ecosystems require sustainable business models where Issuers charge Verifiers for credential presentations (for example, identity verification providers, financial institutions, or authoritative registries charging relying parties per verified transaction). In traditional federated identity protocols where the Identity Provider (IdP) is directly in the loop during authentication, billing a Relying Party is straightforward but comes at the cost of the IdP learning every Relying Party a specific user visits. Conversely, in the offline or decoupled three-party Digital Credentials model, because the Credential Manager releases the credential directly to the Verifier, the Issuer has no native mechanism to enforce that a Verifier is authorized or billed for a presentation without re-introducing a Holder-tracking correlation vector.<a href="#section-1-3" class="pilcrow">¶</a></p>
+<p id="section-1-4">This specification bridges this gap by defining <strong>Conditionally Released Digital Credentials (CRDCs)</strong>. It specifies a credential-format-agnostic cryptographic wrapper around existing credential formats (including SD-JWTs and mdocs) that allows a Credential Manager to release a credential presentation to a Verifier in an encrypted form. During presentation, the Credential Manager encrypts the underlying Digital Credential presentation using a freshly generated, one-time ephemeral symmetric Content Encryption Key (CEK)—producing the <strong>Releasable Credential</strong>—and encrypts that CEK under the Issuer's <strong>Issuer Release Public Key</strong> inside a <strong>Release Token</strong> that includes the Issuer's identifier. To unlock and verify the underlying credential claims, the Verifier sends the Release Token to the Issuer's Release Endpoint. Because the Release Token contains only a freshly generated random key encrypted under a public key shared across a large cohort of credentials, the Issuer can authenticate, authorize, and bill the Verifier before returning the decrypted CEK, without ever learning which Holder or credential was involved in the presentation.<a href="#section-1-4" class="pilcrow">¶</a></p>
+<div id="design-rationale">
+<section id="section-1.1">
+        <h3 id="name-design-rationale-and-goals">
+<a href="#section-1.1" class="section-number selfRef">1.1. </a><a href="#name-design-rationale-and-goals" class="section-name selfRef">Design Rationale and Goals</a>
+        </h3>
+<p id="section-1.1-1">This specification is built around four primary design principles:<a href="#section-1.1-1" class="pilcrow">¶</a></p>
+<ol start="1" type="1" class="normal type-1" id="section-1.1-2">
+<li id="section-1.1-2.1">
+            <p id="section-1.1-2.1.1"><strong>Compatibility with Existing Presentation Ecosystems</strong>: Digital Credentials are issued to Credential Managers (wallets) by Issuers and requested by Verifiers via the W3C Digital Credentials API <span>[<a href="#W3C.DC-API" class="cite xref">W3C.DC-API</a>]</span> and presentation protocols such as OpenID4VP <span>[<a href="#OpenID4VP" class="cite xref">OpenID4VP</a>]</span>. The conditional release mechanism integrates seamlessly into these existing flows.<a href="#section-1.1-2.1.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="section-1.1-2.2">
+            <p id="section-1.1-2.2.1"><strong>Preservation of Three-Party Privacy (Holder Unlinkability at the Issuer)</strong>: In the three-party model, the Issuer does not learn where a given Holder presents their credential. Maintaining this privacy property is a strict requirement of this specification: even when the Issuer authorizes and bills the Verifier for releasing the ephemeral decryption key, the Release Token contains zero Holder-identifying or credential-instance-identifying information.<a href="#section-1.1-2.2.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="section-1.1-2.3">
+            <p id="section-1.1-2.3.1"><strong>Verifiable Issuer Billing and Authorization</strong>: Issuers that wish to charge Verifiers per presentation—or enforce commercial quotas and policy checks—can require the Verifier to redeem the Release Token at the Issuer's Release Endpoint to obtain the ephemeral decryption key.<a href="#section-1.1-2.3.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="section-1.1-2.4">
+            <p id="section-1.1-2.4.1"><strong>Credential-Format Agnosticism</strong>: Rather than modifying underlying credential formats or their selective disclosure and key-binding mechanisms, this specification acts as an outer cryptographic wrapper around any existing credential presentation format, such as SD-JWT <span>[<a href="#RFC9901" class="cite xref">RFC9901</a>]</span> or ISO mdoc <span>[<a href="#ISO.18013-5" class="cite xref">ISO.18013-5</a>]</span>, exposed via a <code>-cr</code> format suffix convention (e.g., <code>dc+sd-jwt-cr</code>, <code>mso_mdoc-cr</code>).<a href="#section-1.1-2.4.1" class="pilcrow">¶</a></p>
+</li>
+        </ol>
+</section>
+</div>
+<div id="feature-summary">
+<section id="section-1.2">
+        <h3 id="name-feature-summary">
+<a href="#section-1.2" class="section-number selfRef">1.2. </a><a href="#name-feature-summary" class="section-name selfRef">Feature Summary</a>
+        </h3>
+<p id="section-1.2-1">This specification defines the following core components:<a href="#section-1.2-1" class="pilcrow">¶</a></p>
+<ol start="1" type="1" class="normal type-1" id="section-1.2-2">
+<li id="section-1.2-2.1">
+            <p id="section-1.2-2.1.1"><strong>Issuer Release Key Provisioning</strong>: Extensions to Credential Issuer Metadata (such as in OpenID for Verifiable Credential Issuance <span>[<a href="#OpenID4VCI" class="cite xref">OpenID4VCI</a>]</span>) allowing an Issuer to publish its <strong>Issuer Release Public Key</strong> (<code>credential_release_encryption_jwks</code>) and <strong>Credential Release Endpoint</strong> (<code>credential_release_endpoint</code>).<a href="#section-1.2-2.1.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="section-1.2-2.2">
+            <p id="section-1.2-2.2.1"><strong>Conditionally Released Digital Credential (CRDC) Data Format</strong>: A composite JSON structure returned as the Digital Credential presentation response, consisting of:<a href="#section-1.2-2.2.1" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-1.2-2.2.2.1">
+                <p id="section-1.2-2.2.2.1.1"><strong>Releasable Credential (<code>releasable_credential</code>)</strong>: The standard underlying Digital Credential presentation (e.g., an SD-JWT+KB or an ISO mdoc <code>DeviceResponse</code>) encrypted with a one-time ephemeral AES Content Encryption Key (CEK).<a href="#section-1.2-2.2.2.1.1" class="pilcrow">¶</a></p>
+</li>
+              <li class="normal" id="section-1.2-2.2.2.2">
+                <p id="section-1.2-2.2.2.2.1"><strong>Release Token (<code>release_token</code>)</strong>: A structure containing the ephemeral CEK encrypted under the Issuer Release Public Key, accompanied by unencrypted routing metadata (such as the <code>iss</code> identifier and key identifier <code>kid</code>) enabling the Verifier to locate the Issuer and redeem the key.<a href="#section-1.2-2.2.2.2.1" class="pilcrow">¶</a></p>
+</li>
+            </ul>
+</li>
+          <li id="section-1.2-2.3">
+            <p id="section-1.2-2.3.1"><strong>Presentation Format Naming Convention (<code>-cr</code>)</strong>: A standardized naming convention appending <code>-cr</code> to existing credential format identifiers (e.g., <code>sd-jwt-cr</code>, <code>dc+sd-jwt-cr</code>, <code>mso_mdoc-cr</code>) for use in presentation protocols such as OpenID4VP.<a href="#section-1.2-2.3.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="section-1.2-2.4">
+            <p id="section-1.2-2.4.1"><strong>Credential Release Redemption Protocol</strong>: An HTTPS request/response protocol between the Verifier and the Issuer's Release Endpoint whereby the Verifier submits the Release Token, the Issuer authenticates and bills the Verifier, and the Issuer returns the decrypted ephemeral CEK so the Verifier can decrypt and validate the underlying Digital Credential.<a href="#section-1.2-2.4.1" class="pilcrow">¶</a></p>
+</li>
+        </ol>
+</section>
+</div>
+<div id="terminology">
+<section id="section-1.3">
+        <h3 id="name-conventions-and-terminology">
+<a href="#section-1.3" class="section-number selfRef">1.3. </a><a href="#name-conventions-and-terminology" class="section-name selfRef">Conventions and Terminology</a>
+        </h3>
+<p id="section-1.3-1">The key words "<span class="bcp14">MUST</span>", "<span class="bcp14">MUST NOT</span>", "<span class="bcp14">REQUIRED</span>", "<span class="bcp14">SHALL</span>", "<span class="bcp14">SHALL NOT</span>", "<span class="bcp14">SHOULD</span>", "<span class="bcp14">SHOULD NOT</span>", "<span class="bcp14">RECOMMENDED</span>", "<span class="bcp14">NOT RECOMMENDED</span>",
+"<span class="bcp14">MAY</span>", and "<span class="bcp14">OPTIONAL</span>" in this document are to be interpreted as
+described in BCP 14 <span>[<a href="#RFC2119" class="cite xref">RFC2119</a>]</span> <span>[<a href="#RFC8174" class="cite xref">RFC8174</a>]</span> when, and only when, they
+appear in all capitals, as shown here.<a href="#section-1.3-1" class="pilcrow">¶</a></p>
+<span class="break"></span><dl class="dlParallel" id="section-1.3-2">
+          <dt id="section-1.3-2.1">Base64url:</dt>
+          <dd style="margin-left: 1.5em" id="section-1.3-2.2">
+            <p id="section-1.3-2.2.1">Denotes the URL-safe base64 encoding without padding defined in Section 2 of <span>[<a href="#RFC7515" class="cite xref">RFC7515</a>]</span>.<a href="#section-1.3-2.2.1" class="pilcrow">¶</a></p>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-1.3-2.3">Digital Credential (DC):</dt>
+          <dd style="margin-left: 1.5em" id="section-1.3-2.4">
+            <p id="section-1.3-2.4.1">A cryptographically verifiable set of claims issued by an Issuer to a Holder, and its corresponding presentation (including selective disclosures and holder key binding), such as an SD-JWT+KB <span>[<a href="#RFC9901" class="cite xref">RFC9901</a>]</span> or an ISO mdoc <code>DeviceResponse</code> <span>[<a href="#ISO.18013-5" class="cite xref">ISO.18013-5</a>]</span>.<a href="#section-1.3-2.4.1" class="pilcrow">¶</a></p>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-1.3-2.5">Issuer Release Public Key:</dt>
+          <dd style="margin-left: 1.5em" id="section-1.3-2.6">
+            <p id="section-1.3-2.6.1">An asymmetric public key provisioned by the Issuer to Credential Managers (e.g., via Issuer metadata in OpenID4VCI) used by the Credential Manager to encrypt the one-time ephemeral Content Encryption Key (CEK) during a presentation.<a href="#section-1.3-2.6.1" class="pilcrow">¶</a></p>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-1.3-2.7">Ephemeral Content Encryption Key (CEK):</dt>
+          <dd style="margin-left: 1.5em" id="section-1.3-2.8">
+            <p id="section-1.3-2.8.1">A single-use, cryptographically random symmetric AES key generated by the Credential Manager for a single presentation to encrypt the underlying Digital Credential presentation.<a href="#section-1.3-2.8.1" class="pilcrow">¶</a></p>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-1.3-2.9">Releasable Credential:</dt>
+          <dd style="margin-left: 1.5em" id="section-1.3-2.10">
+            <p id="section-1.3-2.10.1">The ciphertext structure resulting from encrypting a standard Digital Credential presentation with the one-time ephemeral CEK.<a href="#section-1.3-2.10.1" class="pilcrow">¶</a></p>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-1.3-2.11">Release Token:</dt>
+          <dd style="margin-left: 1.5em" id="section-1.3-2.12">
+            <p id="section-1.3-2.12.1">A cryptographic structure containing the ephemeral CEK encrypted under the Issuer Release Public Key, together with the Issuer metadata (such as the Issuer URL and key identifier) required by the Verifier to locate the Issuer and request key release.<a href="#section-1.3-2.12.1" class="pilcrow">¶</a></p>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-1.3-2.13">Conditionally Released Digital Credential (CRDC):</dt>
+          <dd style="margin-left: 1.5em" id="section-1.3-2.14">
+            <p id="section-1.3-2.14.1">The composite payload returned by the Credential Manager to the Verifier in response to a presentation request, packaging together the <strong>Release Token</strong> and the <strong>Releasable Credential</strong>.<a href="#section-1.3-2.14.1" class="pilcrow">¶</a></p>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-1.3-2.15">Credential Release Endpoint:</dt>
+          <dd style="margin-left: 1.5em" id="section-1.3-2.16">
+            <p id="section-1.3-2.16.1">An HTTPS endpoint operated by the Issuer where a Verifier submits a Release Token to request decryption of the ephemeral CEK, subject to Issuer authorization and billing.<a href="#section-1.3-2.16.1" class="pilcrow">¶</a></p>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-1.3-2.17">Issuer:</dt>
+          <dd style="margin-left: 1.5em" id="section-1.3-2.18">
+            <p id="section-1.3-2.18.1">An entity that issues Digital Credentials to a Holder's Credential Manager, publishes the Issuer Release Public Key, and operates the Credential Release Endpoint.<a href="#section-1.3-2.18.1" class="pilcrow">¶</a></p>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-1.3-2.19">Holder:</dt>
+          <dd style="margin-left: 1.5em" id="section-1.3-2.20">
+            <p id="section-1.3-2.20.1">An entity (typically an end user) that controls Digital Credentials via a Credential Manager and presents them to Verifiers.<a href="#section-1.3-2.20.1" class="pilcrow">¶</a></p>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-1.3-2.21">Credential Manager (Wallet):</dt>
+          <dd style="margin-left: 1.5em" id="section-1.3-2.22">
+            <p id="section-1.3-2.22.1">The user agent, application, or hardware/software component controlled by the Holder that stores Digital Credentials and constructs Conditionally Released Digital Credentials during presentation.<a href="#section-1.3-2.22.1" class="pilcrow">¶</a></p>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-1.3-2.23">Verifier:</dt>
+          <dd style="margin-left: 1.5em" id="section-1.3-2.24">
+            <p id="section-1.3-2.24.1">A relying party that requests a Digital Credential presentation from a Credential Manager, redeems the Release Token at the Issuer's Credential Release Endpoint, decrypts the Releasable Credential, and validates the underlying Digital Credential.<a href="#section-1.3-2.24.1" class="pilcrow">¶</a></p>
+</dd>
+        <dd class="break"></dd>
+</dl>
+</section>
+</div>
+</section>
+</div>
+<div id="flow-diagram">
+<section id="section-2">
+      <h2 id="name-architecture-and-flow-diagr">
+<a href="#section-2" class="section-number selfRef">2. </a><a href="#name-architecture-and-flow-diagr" class="section-name selfRef">Architecture and Flow Diagram</a>
+      </h2>
+<p id="section-2-1"><a href="#fig-flow" class="auto internal xref">Figure 1</a> illustrates the end-to-end lifecycle of a Conditionally Released Digital Credential across Issuance, Presentation, Release Token Redemption, and Verification.<a href="#section-2-1" class="pilcrow">¶</a></p>
+<span id="name-conditionally-released-digi"></span><div id="fig-flow">
+<figure id="figure-1">
+        <div class="alignLeft art-ascii-art art-text artwork" id="section-2-2.1">
+<pre>
++--------------------+      +--------------------+      +--------------------+
+|                    |      | Credential Manager |      |                    |
+|       Issuer       |      |      (Holder)      |      |      Verifier      |
+|                    |      |                    |      |                    |
++--------------------+      +--------------------+      +--------------------+
+          |                            |                           |
+          | 1. Issue Credential +      |                           |
+          |    Issuer Metadata         |                           |
+          |    (Issuer Release         |                           |
+          |     Public Key, PK_I)      |                           |
+          |---------------------------&gt;|                           |
+          |                            |                           |
+          |                            | 2. Presentation Request   |
+          |                            |    (e.g., OpenID4VP over  |
+          |                            |     DC API, format *-cr)  |
+          |                            |&lt;--------------------------|
+          |                            |                           |
+          |                            | 3. Generate normal DC     |
+          |                            |    presentation (DC_pres) |
+          |                            |    &amp; ephemeral AES key K  |
+          |                            |                           |
+          |                            | 4. Encrypt DC_pres with K |
+          |                            |    -&gt; Releasable Cred     |
+          |                            |    Encrypt K with PK_I +  |
+          |                            |    Issuer metadata        |
+          |                            |    -&gt; Release Token       |
+          |                            |                           |
+          |                            | 5. Return CRDC            |
+          |                            |    (Release Token +       |
+          |                            |     Releasable Cred)      |
+          |                            |--------------------------&gt;|
+          |                            |                           |
+          | 6. Inspect Release Token metadata to identify Issuer   |
+          |    &amp; send Release Token to Issuer Release Endpoint     |
+          |&lt;-------------------------------------------------------|
+          |                            |                           |
+          | 7. Authenticate &amp; bill Verifier;                       |
+          |    decrypt Release Token with SK_I to recover K;       |
+          |    return ephemeral AES key K to Verifier              |
+          |-------------------------------------------------------&gt;|
+          |                            |                           |
+          |                            | 8. Decrypt Releasable     |
+          |                            |    Credential using K     |
+          |                            |    -&gt; recover DC_pres     |
+          |                            |                           |
+          |                            | 9. Validate DC_pres       |
+          |                            |    as normal              |
+          +                            +                           +
+</pre>
+</div>
+<figcaption><a href="#figure-1" class="selfRef">Figure 1</a>:
+<a href="#name-conditionally-released-digi" class="selfRef">Conditionally Released Digital Credential Issuance, Presentation, and Release Flow</a>
+        </figcaption></figure>
+</div>
+</section>
+</div>
+<div id="concepts">
+<section id="section-3">
+      <h2 id="name-concepts">
+<a href="#section-3" class="section-number selfRef">3. </a><a href="#name-concepts" class="section-name selfRef">Concepts</a>
+      </h2>
+<p id="section-3-1">This section describes the core components and lifecycle of Conditionally Released Digital Credentials at a conceptual level, prior to the normative data formats specified in <a href="#data-formats" class="auto internal xref">Section 4</a>.<a href="#section-3-1" class="pilcrow">¶</a></p>
+<div id="key-provisioning">
+<section id="section-3.1">
+        <h3 id="name-issuer-release-public-key-p">
+<a href="#section-3.1" class="section-number selfRef">3.1. </a><a href="#name-issuer-release-public-key-p" class="section-name selfRef">Issuer Release Public Key Provisioning</a>
+        </h3>
+<p id="section-3.1-1">During credential issuance (for example, using OpenID for Verifiable Credential Issuance <span>[<a href="#OpenID4VCI" class="cite xref">OpenID4VCI</a>]</span>), or via discoverable Issuer metadata, the Issuer provides the Credential Manager with an asymmetric public key termed the <strong>Issuer Release Public Key</strong> (<code>PK_I</code>), along with the Issuer's identifier (<code>iss</code>) and optionally a Credential Release Endpoint URL.<a href="#section-3.1-1" class="pilcrow">¶</a></p>
+<p id="section-3.1-2">When an Issuer marks an issued credential as requiring conditional release, the Credential Manager stores the Issuer Release Public Key and Issuer metadata alongside the credential. To preserve Holder unlinkability, the Issuer <span class="bcp14">MUST</span> provision the same Issuer Release Public Key across a sufficiently large cohort of Holders and credentials (see <a href="#privacy-cohort" class="auto internal xref">Section 8.1</a>).<a href="#section-3.1-2" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="releasable-cred-and-token">
+<section id="section-3.2">
+        <h3 id="name-releasable-credential-and-r">
+<a href="#section-3.2" class="section-number selfRef">3.2. </a><a href="#name-releasable-credential-and-r" class="section-name selfRef">Releasable Credential and Release Token</a>
+        </h3>
+<p id="section-3.2-1">When a Verifier requests a credential presentation from the Credential Manager (e.g., via OpenID4VP over the W3C Digital Credentials API), the Credential Manager first constructs the standard presentation payload for the underlying credential format—including any Holder-selected disclosures and cryptographic Holder key binding (such as an SD-JWT+KB or an ISO mdoc <code>DeviceResponse</code> bound to the Verifier's <code>nonce</code> and <code>aud</code>/<code>client_id</code>).<a href="#section-3.2-1" class="pilcrow">¶</a></p>
+<p id="section-3.2-2">Instead of returning this cleartext presentation directly to the Verifier, the Credential Manager performs a two-part wrapping operation:<a href="#section-3.2-2" class="pilcrow">¶</a></p>
+<ol start="1" type="1" class="normal type-1" id="section-3.2-3">
+<li id="section-3.2-3.1">
+            <p id="section-3.2-3.1.1"><strong>Constructing the Releasable Credential</strong>: The Credential Manager generates a fresh, single-use ephemeral symmetric AES Content Encryption Key (<code>K</code>). It encrypts the serialized Digital Credential presentation under <code>K</code> using an authenticated encryption with associated data (AEAD) algorithm. The resulting ciphertext structure is the <strong>Releasable Credential</strong>.<a href="#section-3.2-3.1.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="section-3.2-3.2">
+            <p id="section-3.2-3.2.1"><strong>Constructing the Release Token</strong>: The Credential Manager encrypts the ephemeral AES key <code>K</code> using the Issuer's <strong>Issuer Release Public Key</strong> (<code>PK_I</code>). This encrypted key is packaged into a structure called the <strong>Release Token</strong>, which includes plaintext metadata identifying the Issuer (<code>iss</code>), the key identifier (<code>kid</code>), and optional release endpoint or credential type metadata so the Verifier knows where and how to redeem the token.<a href="#section-3.2-3.2.1" class="pilcrow">¶</a></p>
+</li>
+        </ol>
+</section>
+</div>
+<div id="crdc-concept">
+<section id="section-3.3">
+        <h3 id="name-conditionally-released-digit">
+<a href="#section-3.3" class="section-number selfRef">3.3. </a><a href="#name-conditionally-released-digit" class="section-name selfRef">Conditionally Released Digital Credential (CRDC)</a>
+        </h3>
+<p id="section-3.3-1">The Credential Manager packages the <strong>Release Token</strong> and the <strong>Releasable Credential</strong> together into a composite envelope called the <strong>Conditionally Released Digital Credential (CRDC)</strong> and returns it to the Verifier as the Digital Credential response.<a href="#section-3.3-1" class="pilcrow">¶</a></p>
+<p id="section-3.3-2">From the perspective of presentation protocols such as OpenID4VP, a Conditionally Released Digital Credential can be negotiated as a distinct credential format wrapper derived from the underlying format by appending the <code>-cr</code> suffix (for example, <code>dc+sd-jwt-cr</code> or <code>mso_mdoc-cr</code>).<a href="#section-3.3-2" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="redemption-concept">
+<section id="section-3.4">
+        <h3 id="name-credential-release-redempti">
+<a href="#section-3.4" class="section-number selfRef">3.4. </a><a href="#name-credential-release-redempti" class="section-name selfRef">Credential Release Redemption and Verification</a>
+        </h3>
+<p id="section-3.4-1">Upon receiving a Conditionally Released Digital Credential, the Verifier cannot immediately inspect or verify the underlying credential claims because they are encrypted within the Releasable Credential under the ephemeral AES key <code>K</code>. To unlock the credential, the Verifier performs the following steps:<a href="#section-3.4-1" class="pilcrow">¶</a></p>
+<ol start="1" type="1" class="normal type-1" id="section-3.4-2">
+<li id="section-3.4-2.1">
+            <p id="section-3.4-2.1.1"><strong>Inspect Metadata</strong>: The Verifier inspects the unencrypted metadata in the <strong>Release Token</strong> to identify the Issuer (and, via Issuer metadata discovery or an explicit claim, the Issuer's Credential Release Endpoint).<a href="#section-3.4-2.1.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="section-3.4-2.2">
+            <p id="section-3.4-2.2.1"><strong>Request Release from Issuer</strong>: The Verifier sends the <strong>Release Token</strong> in an authenticated request to the Issuer's Credential Release Endpoint, requesting that the presentation key be released.<a href="#section-3.4-2.2.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="section-3.4-2.3">
+            <p id="section-3.4-2.3.1"><strong>Issuer Approval and Billing</strong>: The Issuer authenticates the Verifier, verifies that the Verifier is authorized to receive presentations, and optionally records a billable event or deducts from the Verifier's quota. If approved, the Issuer uses its private key (<code>SK_I</code>) corresponding to the Issuer Release Public Key (<code>PK_I</code>) to decrypt the Release Token, recovering the one-time ephemeral AES key <code>K</code>, and returns <code>K</code> to the Verifier over the TLS-protected channel.<a href="#section-3.4-2.3.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="section-3.4-2.4">
+            <p id="section-3.4-2.4.1"><strong>Decrypt Releasable Credential</strong>: The Verifier uses the returned AES key <code>K</code> to decrypt the <strong>Releasable Credential</strong>, revealing the underlying Digital Credential presentation.<a href="#section-3.4-2.4.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="section-3.4-2.5">
+            <p id="section-3.4-2.5.1"><strong>Standard Credential Validation</strong>: The Verifier validates the underlying Digital Credential presentation exactly as specified by its native format (e.g., verifying the Issuer signature, Holder key binding, disclosures, validity period, and Verifier nonce/audience binding).<a href="#section-3.4-2.5.1" class="pilcrow">¶</a></p>
+</li>
+        </ol>
+<p id="section-3.4-3">Crucially, during Step 2 and Step 3, the Issuer only ever sees the Verifier's identity and the <strong>Release Token</strong> (which wraps a random ephemeral key <code>K</code> generated by the Credential Manager at presentation time). The Issuer never sees the Releasable Credential, any credential claims, or any identifier tied to the Holder or issuance transaction.<a href="#section-3.4-3" class="pilcrow">¶</a></p>
+</section>
+</div>
+</section>
+</div>
+<div id="data-formats">
+<section id="section-4">
+      <h2 id="name-data-formats-and-cryptograp">
+<a href="#section-4" class="section-number selfRef">4. </a><a href="#name-data-formats-and-cryptograp" class="section-name selfRef">Data Formats and Cryptographic Wrapper</a>
+      </h2>
+<div id="issuer-metadata">
+<section id="section-4.1">
+        <h3 id="name-issuer-metadata-parameters">
+<a href="#section-4.1" class="section-number selfRef">4.1. </a><a href="#name-issuer-metadata-parameters" class="section-name selfRef">Issuer Metadata Parameters</a>
+        </h3>
+<p id="section-4.1-1">Issuers supporting Conditionally Released Digital Credentials advertise their conditional release parameters in their Credential Issuer Metadata (for example, the Credential Issuer Metadata document defined in <span>[<a href="#OpenID4VCI" class="cite xref">OpenID4VCI</a>]</span> or OAuth Authorization Server Metadata <span>[<a href="#RFC8414" class="cite xref">RFC8414</a>]</span>).<a href="#section-4.1-1" class="pilcrow">¶</a></p>
+<p id="section-4.1-2">The following metadata parameters are defined:<a href="#section-4.1-2" class="pilcrow">¶</a></p>
+<span class="break"></span><dl class="dlParallel" id="section-4.1-3">
+          <dt id="section-4.1-3.1">
+<code>credential_release_endpoint</code>:</dt>
+          <dd style="margin-left: 1.5em" id="section-4.1-3.2">
+            <p id="section-4.1-3.2.1"><span class="bcp14">REQUIRED</span>. URL of the Issuer's Credential Release Endpoint where Verifiers send Release Tokens to obtain the decrypted ephemeral key. This URL <span class="bcp14">MUST</span> use the <code>https</code> scheme.<a href="#section-4.1-3.2.1" class="pilcrow">¶</a></p>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-4.1-3.3">
+<code>credential_release_encryption_jwks</code>:</dt>
+          <dd style="margin-left: 1.5em" id="section-4.1-3.4">
+            <p id="section-4.1-3.4.1"><span class="bcp14">REQUIRED</span> (unless <code>credential_release_encryption_jwks_uri</code> is provided). A JSON Web Key Set (JWKS) <span>[<a href="#RFC7517" class="cite xref">RFC7517</a>]</span> containing one or more <strong>Issuer Release Public Keys</strong> used by Credential Managers to encrypt ephemeral Content Encryption Keys into Release Tokens. Each JWK <span class="bcp14">MUST</span> contain a <code>kid</code> (Key ID), <code>kty</code> (Key Type), <code>use</code> set to <code>"enc"</code>, and an <code>alg</code> (Algorithm) parameter (e.g., <code>"ECDH-ES"</code>, <code>"ECDH-ES+A256KW"</code>, or <code>"RSA-OAEP-256"</code>).<a href="#section-4.1-3.4.1" class="pilcrow">¶</a></p>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-4.1-3.5">
+<code>credential_release_encryption_jwks_uri</code>:</dt>
+          <dd style="margin-left: 1.5em" id="section-4.1-3.6">
+            <p id="section-4.1-3.6.1"><span class="bcp14">OPTIONAL</span>. An HTTPS URL referencing a JWKS document containing the Issuer's <strong>Issuer Release Public Keys</strong>.<a href="#section-4.1-3.6.1" class="pilcrow">¶</a></p>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-4.1-3.7">
+<code>credential_release_required</code>:</dt>
+          <dd style="margin-left: 1.5em" id="section-4.1-3.8">
+            <p id="section-4.1-3.8.1"><span class="bcp14">OPTIONAL</span>. A boolean value inside a specific credential configuration object in Issuer metadata indicating whether presentations of this credential <span class="bcp14">MUST</span> be wrapped as a Conditionally Released Digital Credential. Defaults to <code>false</code> if omitted.<a href="#section-4.1-3.8.1" class="pilcrow">¶</a></p>
+</dd>
+        <dd class="break"></dd>
+</dl>
+</section>
+</div>
+<div id="releasable-credential-format">
+<section id="section-4.2">
+        <h3 id="name-releasable-credential-forma">
+<a href="#section-4.2" class="section-number selfRef">4.2. </a><a href="#name-releasable-credential-forma" class="section-name selfRef">Releasable Credential Format</a>
+        </h3>
+<p id="section-4.2-1">The <strong>Releasable Credential</strong> represents the underlying Digital Credential presentation encrypted under the one-time ephemeral AES key <code>K</code> (the Content Encryption Key, or CEK).<a href="#section-4.2-1" class="pilcrow">¶</a></p>
+<p id="section-4.2-2">To construct the Releasable Credential:<a href="#section-4.2-2" class="pilcrow">¶</a></p>
+<ol start="1" type="1" class="normal type-1" id="section-4.2-3">
+<li id="section-4.2-3.1">
+            <p id="section-4.2-3.1.1">The Credential Manager produces the standard Digital Credential presentation in its native format (e.g., a UTF-8 string for an SD-JWT+KB compact serialization, or raw CBOR bytes for an ISO/IEC 18013-5 <code>DeviceResponse</code>).<a href="#section-4.2-3.1.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="section-4.2-3.2">
+            <p id="section-4.2-3.2.1">The Credential Manager generates a fresh, cryptographically random symmetric AES Content Encryption Key <code>K</code> of length 256 bits (32 octets) (or 128 bits if <code>A128GCM</code> is used) and a random 96-bit (12-octet) Initialization Vector (<code>IV</code>).<a href="#section-4.2-3.2.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="section-4.2-3.3">
+            <p id="section-4.2-3.3.1">The Credential Manager encrypts the raw octets of the underlying Digital Credential presentation using AES-GCM (<code>A256GCM</code> <span class="bcp14">REQUIRED</span>, <code>A128GCM</code> <span class="bcp14">OPTIONAL</span>) <span>[<a href="#RFC7518" class="cite xref">RFC7518</a>]</span>.<a href="#section-4.2-3.3.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="section-4.2-3.4">
+            <p id="section-4.2-3.4.1">To cryptographically bind the Releasable Credential to the Release Token and prevent mix-and-match substitution attacks, the ASCII bytes of the compact <strong>Release Token</strong> (defined in <a href="#release-token-format" class="auto internal xref">Section 4.3</a>) <span class="bcp14">MUST</span> be passed as the Additional Authenticated Data (<code>AAD</code>) to the AES-GCM encryption operation.<a href="#section-4.2-3.4.1" class="pilcrow">¶</a></p>
+</li>
+        </ol>
+<p id="section-4.2-4">The <code>releasable_credential</code> is represented as a JSON object with the following members:<a href="#section-4.2-4" class="pilcrow">¶</a></p>
+<span class="break"></span><dl class="dlParallel" id="section-4.2-5">
+          <dt id="section-4.2-5.1">
+<code>enc</code>:</dt>
+          <dd style="margin-left: 1.5em" id="section-4.2-5.2">
+            <p id="section-4.2-5.2.1"><span class="bcp14">REQUIRED</span>. The symmetric content encryption algorithm used to encrypt the underlying credential presentation. <span class="bcp14">MUST</span> be a registered JWE <code>"enc"</code> algorithm name from <span>[<a href="#RFC7518" class="cite xref">RFC7518</a>]</span>, with <code>"A256GCM"</code> as the default and Mandatory-to-Implement (MTI) algorithm.<a href="#section-4.2-5.2.1" class="pilcrow">¶</a></p>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-4.2-5.3">
+<code>iv</code>:</dt>
+          <dd style="margin-left: 1.5em" id="section-4.2-5.4">
+            <p id="section-4.2-5.4.1"><span class="bcp14">REQUIRED</span>. The base64url-encoded Initialization Vector (nonce) used for the AEAD encryption (12 octets for AES-GCM).<a href="#section-4.2-5.4.1" class="pilcrow">¶</a></p>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-4.2-5.5">
+<code>ciphertext</code>:</dt>
+          <dd style="margin-left: 1.5em" id="section-4.2-5.6">
+            <p id="section-4.2-5.6.1"><span class="bcp14">REQUIRED</span>. The base64url-encoded AEAD ciphertext of the underlying Digital Credential presentation.<a href="#section-4.2-5.6.1" class="pilcrow">¶</a></p>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-4.2-5.7">
+<code>tag</code>:</dt>
+          <dd style="margin-left: 1.5em" id="section-4.2-5.8">
+            <p id="section-4.2-5.8.1"><span class="bcp14">REQUIRED</span>. The base64url-encoded Authentication Tag produced by the AEAD encryption (16 octets for AES-GCM).<a href="#section-4.2-5.8.1" class="pilcrow">¶</a></p>
+</dd>
+        <dd class="break"></dd>
+</dl>
+</section>
+</div>
+<div id="release-token-format">
+<section id="section-4.3">
+        <h3 id="name-release-token-format">
+<a href="#section-4.3" class="section-number selfRef">4.3. </a><a href="#name-release-token-format" class="section-name selfRef">Release Token Format</a>
+        </h3>
+<p id="section-4.3-1">The <strong>Release Token</strong> encapsulates the one-time ephemeral AES key <code>K</code> encrypted under the <strong>Issuer Release Public Key</strong>, along with the Issuer metadata needed by the Verifier to locate the Issuer and redeem the token.<a href="#section-4.3-1" class="pilcrow">¶</a></p>
+<p id="section-4.3-2">The Release Token is serialized as a JSON Web Encryption (JWE) Compact Serialization string <span>[<a href="#RFC7516" class="cite xref">RFC7516</a>]</span> whose plaintext payload contains the ephemeral AES key <code>K</code>.<a href="#section-4.3-2" class="pilcrow">¶</a></p>
+<div id="release-token-header">
+<section id="section-4.3.1">
+          <h4 id="name-release-token-jwe-protected">
+<a href="#section-4.3.1" class="section-number selfRef">4.3.1. </a><a href="#name-release-token-jwe-protected" class="section-name selfRef">Release Token JWE Protected Header</a>
+          </h4>
+<p id="section-4.3.1-1">The JWE Protected Header of the Release Token <span class="bcp14">MUST</span> contain the following parameters:<a href="#section-4.3.1-1" class="pilcrow">¶</a></p>
+<span class="break"></span><dl class="dlParallel" id="section-4.3.1-2">
+            <dt id="section-4.3.1-2.1">
+<code>alg</code>:</dt>
+            <dd style="margin-left: 1.5em" id="section-4.3.1-2.2">
+              <p id="section-4.3.1-2.2.1"><span class="bcp14">REQUIRED</span>. The asymmetric key encryption / key agreement algorithm used to encrypt the ephemeral key <code>K</code> under the Issuer Release Public Key (e.g., <code>"ECDH-ES+A256KW"</code>, <code>"ECDH-ES"</code>, or <code>"RSA-OAEP-256"</code>), or an HPKE-based JWE algorithm <span>[<a href="#RFC9180" class="cite xref">RFC9180</a>]</span>. <code>"ECDH-ES+A256KW"</code> with curve <code>"P-256"</code> is Mandatory-to-Implement (MTI).<a href="#section-4.3.1-2.2.1" class="pilcrow">¶</a></p>
+</dd>
+            <dd class="break"></dd>
+<dt id="section-4.3.1-2.3">
+<code>enc</code>:</dt>
+            <dd style="margin-left: 1.5em" id="section-4.3.1-2.4">
+              <p id="section-4.3.1-2.4.1"><span class="bcp14">REQUIRED</span>. The content encryption algorithm used inside the JWE to encrypt the payload containing <code>K</code> (e.g., <code>"A256GCM"</code>).<a href="#section-4.3.1-2.4.1" class="pilcrow">¶</a></p>
+</dd>
+            <dd class="break"></dd>
+<dt id="section-4.3.1-2.5">
+<code>typ</code>:</dt>
+            <dd style="margin-left: 1.5em" id="section-4.3.1-2.6">
+              <p id="section-4.3.1-2.6.1"><span class="bcp14">REQUIRED</span>. Media type of the Release Token. <span class="bcp14">MUST</span> be <code>"crdc-release+jwe"</code>.<a href="#section-4.3.1-2.6.1" class="pilcrow">¶</a></p>
+</dd>
+            <dd class="break"></dd>
+<dt id="section-4.3.1-2.7">
+<code>kid</code>:</dt>
+            <dd style="margin-left: 1.5em" id="section-4.3.1-2.8">
+              <p id="section-4.3.1-2.8.1"><span class="bcp14">REQUIRED</span>. The Key Identifier of the <strong>Issuer Release Public Key</strong> used to encrypt the Release Token.<a href="#section-4.3.1-2.8.1" class="pilcrow">¶</a></p>
+</dd>
+            <dd class="break"></dd>
+<dt id="section-4.3.1-2.9">
+<code>iss</code>:</dt>
+            <dd style="margin-left: 1.5em" id="section-4.3.1-2.10">
+              <p id="section-4.3.1-2.10.1"><span class="bcp14">REQUIRED</span>. The Issuer identifier (an HTTPS URL with no query or fragment components) identifying the Issuer that issued the underlying Digital Credential and that can decrypt this Release Token.<a href="#section-4.3.1-2.10.1" class="pilcrow">¶</a></p>
+</dd>
+            <dd class="break"></dd>
+<dt id="section-4.3.1-2.11">
+<code>cr_ep</code>:</dt>
+            <dd style="margin-left: 1.5em" id="section-4.3.1-2.12">
+              <p id="section-4.3.1-2.12.1"><span class="bcp14">OPTIONAL</span>. The HTTPS URL of the Issuer's Credential Release Endpoint (<code>credential_release_endpoint</code>). Including <code>cr_ep</code> allows the Verifier to contact the Release Endpoint directly, though the Verifier <span class="bcp14">SHOULD</span> validate it against discovered Issuer metadata for <code>iss</code>.<a href="#section-4.3.1-2.12.1" class="pilcrow">¶</a></p>
+</dd>
+          <dd class="break"></dd>
+</dl>
+<p id="section-4.3.1-3">Note: When using <code>"alg": "ECDH-ES"</code> or <code>"ECDH-ES+A256KW"</code>, the JWE Protected Header also includes the standard <code>"epk"</code> (Ephemeral Public Key) parameter generated by the Credential Manager for this single presentation.<a href="#section-4.3.1-3" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="release-token-payload">
+<section id="section-4.3.2">
+          <h4 id="name-release-token-plaintext-pay">
+<a href="#section-4.3.2" class="section-number selfRef">4.3.2. </a><a href="#name-release-token-plaintext-pay" class="section-name selfRef">Release Token Plaintext Payload</a>
+          </h4>
+<p id="section-4.3.2-1">The plaintext encrypted inside the Release Token JWE <span class="bcp14">MUST</span> be a UTF-8 encoded JSON object containing at least the following members:<a href="#section-4.3.2-1" class="pilcrow">¶</a></p>
+<span class="break"></span><dl class="dlParallel" id="section-4.3.2-2">
+            <dt id="section-4.3.2-2.1">
+<code>k</code>:</dt>
+            <dd style="margin-left: 1.5em" id="section-4.3.2-2.2">
+              <p id="section-4.3.2-2.2.1"><span class="bcp14">REQUIRED</span>. The base64url-encoded raw octets of the one-time ephemeral AES Content Encryption Key <code>K</code> used to encrypt the <code>releasable_credential</code>.<a href="#section-4.3.2-2.2.1" class="pilcrow">¶</a></p>
+</dd>
+            <dd class="break"></dd>
+<dt id="section-4.3.2-2.3">
+<code>enc</code>:</dt>
+            <dd style="margin-left: 1.5em" id="section-4.3.2-2.4">
+              <p id="section-4.3.2-2.4.1"><span class="bcp14">REQUIRED</span>. The symmetric algorithm identifier (e.g., <code>"A256GCM"</code>) with which <code>K</code> is used.<a href="#section-4.3.2-2.4.1" class="pilcrow">¶</a></p>
+</dd>
+          <dd class="break"></dd>
+</dl>
+</section>
+</div>
+</section>
+</div>
+<div id="crdc-envelope">
+<section id="section-4.4">
+        <h3 id="name-conditionally-released-digita">
+<a href="#section-4.4" class="section-number selfRef">4.4. </a><a href="#name-conditionally-released-digita" class="section-name selfRef">Conditionally Released Digital Credential (CRDC) Envelope</a>
+        </h3>
+<p id="section-4.4-1">The <strong>Conditionally Released Digital Credential (CRDC)</strong> is the top-level JSON object returned by the Credential Manager to the Verifier in the presentation response. It contains the following fields:<a href="#section-4.4-1" class="pilcrow">¶</a></p>
+<span class="break"></span><dl class="dlParallel" id="section-4.4-2">
+          <dt id="section-4.4-2.1">
+<code>format</code>:</dt>
+          <dd style="margin-left: 1.5em" id="section-4.4-2.2">
+            <p id="section-4.4-2.2.1"><span class="bcp14">REQUIRED</span>. The presentation format identifier indicating a conditionally released credential (e.g., <code>"dc+sd-jwt-cr"</code> or <code>"mso_mdoc-cr"</code>), or the underlying credential format identifier when the outer protocol already signals the <code>-cr</code> format.<a href="#section-4.4-2.2.1" class="pilcrow">¶</a></p>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-4.4-2.3">
+<code>release_token</code>:</dt>
+          <dd style="margin-left: 1.5em" id="section-4.4-2.4">
+            <p id="section-4.4-2.4.1"><span class="bcp14">REQUIRED</span>. The JWE Compact Serialization string representing the Release Token (as defined in <a href="#release-token-format" class="auto internal xref">Section 4.3</a>).<a href="#section-4.4-2.4.1" class="pilcrow">¶</a></p>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-4.4-2.5">
+<code>releasable_credential</code>:</dt>
+          <dd style="margin-left: 1.5em" id="section-4.4-2.6">
+            <p id="section-4.4-2.6.1"><span class="bcp14">REQUIRED</span>. The JSON object representing the encrypted Digital Credential presentation (as defined in <a href="#releasable-credential-format" class="auto internal xref">Section 4.2</a>).<a href="#section-4.4-2.6.1" class="pilcrow">¶</a></p>
+</dd>
+        <dd class="break"></dd>
+</dl>
+<p id="section-4.4-3">Example CRDC structure:<a href="#section-4.4-3" class="pilcrow">¶</a></p>
+<div class="lang-json sourcecode" id="section-4.4-4">
+<pre>
+{
+  "format": "dc+sd-jwt-cr",
+  "release_token": "eyJhbGciOiJFQ0RILUVTK0EyNTZLVyIsImVuYyI6IkEyNTZHQ00iLCJ0eXAiOiJjcmRjLXJlbGVhc2UranVlIiwia2lkIjoiaXNzdWVyLXJlbGVhc2Uta2V5LTIwMjYiLCJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlLmNvbSJ9...",
+  "releasable_credential": {
+    "enc": "A256GCM",
+    "iv": "3p7bfXt93p7bfXt9",
+    "ciphertext": "8f3d9a7b6c5e4f3a2b1c0d9e8f7a6b5c...",
+    "tag": "1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d"
+  }
+}
+</pre><a href="#section-4.4-4" class="pilcrow">¶</a>
+</div>
+</section>
+</div>
+<div id="format-identifiers">
+<section id="section-4.5">
+        <h3 id="name-presentation-format-identif">
+<a href="#section-4.5" class="section-number selfRef">4.5. </a><a href="#name-presentation-format-identif" class="section-name selfRef">Presentation Format Identifiers (<code>-cr</code> Suffix Convention)</a>
+        </h3>
+<p id="section-4.5-1">When used with presentation protocols that negotiate credential formats (such as OpenID4VP <span>[<a href="#OpenID4VP" class="cite xref">OpenID4VP</a>]</span> and the W3C Digital Credentials API <span>[<a href="#W3C.DC-API" class="cite xref">W3C.DC-API</a>]</span>), a Conditionally Released Digital Credential format identifier is constructed by appending the suffix <strong><code>-cr</code></strong> to the underlying credential format identifier:<a href="#section-4.5-1" class="pilcrow">¶</a></p>
+<table class="center" id="table-1">
+          <caption><a href="#table-1" class="selfRef">Table 1</a></caption>
+<thead>
+            <tr>
+              <th class="text-left" rowspan="1" colspan="1">Underlying Credential Format</th>
+              <th class="text-left" rowspan="1" colspan="1">Underlying Format Identifier</th>
+              <th class="text-left" rowspan="1" colspan="1">Conditionally Released Format Identifier</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">SD-JWT VC <span>[<a href="#SD-JWT-VC" class="cite xref">SD-JWT-VC</a>]</span>
+</td>
+              <td class="text-left" rowspan="1" colspan="1">
+                <code>dc+sd-jwt</code> (or <code>vc+sd-jwt</code>)</td>
+              <td class="text-left" rowspan="1" colspan="1">
+                <code>dc+sd-jwt-cr</code> (or <code>vc+sd-jwt-cr</code>)</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">Bare SD-JWT <span>[<a href="#RFC9901" class="cite xref">RFC9901</a>]</span>
+</td>
+              <td class="text-left" rowspan="1" colspan="1">
+                <code>sd-jwt</code>
+</td>
+              <td class="text-left" rowspan="1" colspan="1">
+                <code>sd-jwt-cr</code>
+</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">ISO/IEC 18013-5 mdoc <span>[<a href="#ISO.18013-5" class="cite xref">ISO.18013-5</a>]</span>
+</td>
+              <td class="text-left" rowspan="1" colspan="1">
+                <code>mso_mdoc</code>
+</td>
+              <td class="text-left" rowspan="1" colspan="1">
+                <code>mso_mdoc-cr</code>
+</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">W3C Verifiable Credentials</td>
+              <td class="text-left" rowspan="1" colspan="1">
+                <code>jwt_vc_json</code> / <code>ldp_vc</code>
+</td>
+              <td class="text-left" rowspan="1" colspan="1">
+                <code>jwt_vc_json-cr</code> / <code>ldp_vc-cr</code>
+</td>
+            </tr>
+          </tbody>
+        </table>
+<p id="section-4.5-3">When a Verifier includes a <code>-cr</code> format identifier in its presentation request (or indicates support for conditional release), a Credential Manager holding a credential that requires conditional release returns the CRDC JSON envelope defined in <a href="#crdc-envelope" class="auto internal xref">Section 4.4</a>.<a href="#section-4.5-3" class="pilcrow">¶</a></p>
+</section>
+</div>
+</section>
+</div>
+<div id="protocol-flow">
+<section id="section-5">
+      <h2 id="name-protocol-flow-and-processin">
+<a href="#section-5" class="section-number selfRef">5. </a><a href="#name-protocol-flow-and-processin" class="section-name selfRef">Protocol Flow and Processing Rules</a>
+      </h2>
+<div id="issuance-flow">
+<section id="section-5.1">
+        <h3 id="name-issuance-and-key-discovery">
+<a href="#section-5.1" class="section-number selfRef">5.1. </a><a href="#name-issuance-and-key-discovery" class="section-name selfRef">Issuance and Key Discovery</a>
+        </h3>
+<ol start="1" type="1" class="normal type-1" id="section-5.1-1">
+<li id="section-5.1-1.1">
+            <p id="section-5.1-1.1.1"><strong>Issuer Key Generation</strong>: The Issuer generates one or more asymmetric key pairs (<code>PK_I</code>, <code>SK_I</code>) designated as <strong>Issuer Release Keys</strong> and publishes the public keys (<code>PK_I</code>) in <code>credential_release_encryption_jwks</code> alongside its <code>credential_release_endpoint</code> in its Issuer Metadata.<a href="#section-5.1-1.1.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="section-5.1-1.2">
+            <p id="section-5.1-1.2.1"><strong>Provisioning to Credential Manager</strong>: During credential issuance (e.g., via OpenID4VCI), the Credential Manager retrieves and caches the Issuer's <code>credential_release_encryption_jwks</code> and <code>iss</code> identifier associated with the issued Digital Credential. The Credential Manager <span class="bcp14">SHOULD</span> periodically refresh the Issuer's release public keys in accordance with HTTP cache headers, using anonymous network transport (e.g., Oblivious HTTP <span>[<a href="#RFC9458" class="cite xref">RFC9458</a>]</span> or proxy) if key rotation fetches occur post-issuance.<a href="#section-5.1-1.2.1" class="pilcrow">¶</a></p>
+</li>
+        </ol>
+</section>
+</div>
+<div id="presentation-flow">
+<section id="section-5.2">
+        <h3 id="name-presentation-by-the-credent">
+<a href="#section-5.2" class="section-number selfRef">5.2. </a><a href="#name-presentation-by-the-credent" class="section-name selfRef">Presentation by the Credential Manager</a>
+        </h3>
+<p id="section-5.2-1">When the Credential Manager receives a presentation request from a Verifier for a credential configured for conditional release, the Credential Manager <span class="bcp14">MUST</span> perform the following steps:<a href="#section-5.2-1" class="pilcrow">¶</a></p>
+<ol start="1" type="1" class="normal type-1" id="section-5.2-2">
+<li id="section-5.2-2.1">
+            <p id="section-5.2-2.1.1"><strong>Generate Underlying Presentation</strong>: Construct the native Digital Credential presentation (<code>DC_pres</code>) according to the rules of the underlying credential format and presentation protocol. Crucially, any cryptographic Holder Key Binding (e.g., the Key Binding JWT in SD-JWT+KB or <code>DeviceAuth</code> in ISO mdoc) <span class="bcp14">MUST</span> bind to the Verifier's <code>nonce</code> and <code>aud</code>/<code>client_id</code> inside the inner <code>DC_pres</code> prior to encryption.<a href="#section-5.2-2.1.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="section-5.2-2.2">
+            <p id="section-5.2-2.2.1"><strong>Generate Ephemeral AES Key</strong>: Generate a fresh, cryptographically random 256-bit AES key <code>K</code> and a 96-bit random <code>IV</code> using a cryptographically secure pseudorandom number generator (CSPRNG) <span>[<a href="#RFC4086" class="cite xref">RFC4086</a>]</span>. <code>K</code> <span class="bcp14">MUST NOT</span> be reused across presentations.<a href="#section-5.2-2.2.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="section-5.2-2.3">
+            <p id="section-5.2-2.3.1"><strong>Create Release Token</strong>:<a href="#section-5.2-2.3.1" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-5.2-2.3.2.1">
+                <p id="section-5.2-2.3.2.1.1">Construct the Release Token plaintext JSON object <code>{"k": base64url(K), "enc": "A256GCM"}</code>.<a href="#section-5.2-2.3.2.1.1" class="pilcrow">¶</a></p>
+</li>
+              <li class="normal" id="section-5.2-2.3.2.2">
+                <p id="section-5.2-2.3.2.2.1">Construct the JWE Protected Header containing <code>"alg"</code>, <code>"enc"</code>, <code>"typ": "crdc-release+jwe"</code>, <code>"kid"</code>, and <code>"iss"</code> (set to the Issuer's identifier URL).<a href="#section-5.2-2.3.2.2.1" class="pilcrow">¶</a></p>
+</li>
+              <li class="normal" id="section-5.2-2.3.2.3">
+                <p id="section-5.2-2.3.2.3.1">Encrypt the plaintext under the Issuer's <strong>Issuer Release Public Key</strong> (<code>PK_I</code>) to produce the JWE Compact Serialization string <code>release_token</code>.<a href="#section-5.2-2.3.2.3.1" class="pilcrow">¶</a></p>
+</li>
+            </ul>
+</li>
+          <li id="section-5.2-2.4">
+            <p id="section-5.2-2.4.1"><strong>Create Releasable Credential</strong>:<a href="#section-5.2-2.4.1" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-5.2-2.4.2.1">
+                <p id="section-5.2-2.4.2.1.1">Encrypt the raw octets of <code>DC_pres</code> using AES-256-GCM with key <code>K</code>, initialization vector <code>IV</code>, and Additional Authenticated Data (<code>AAD</code>) set to the ASCII bytes of <code>release_token</code>.<a href="#section-5.2-2.4.2.1.1" class="pilcrow">¶</a></p>
+</li>
+              <li class="normal" id="section-5.2-2.4.2.2">
+                <p id="section-5.2-2.4.2.2.1">Construct the <code>releasable_credential</code> JSON object containing <code>enc</code>, <code>iv</code>, <code>ciphertext</code>, and <code>tag</code>.<a href="#section-5.2-2.4.2.2.1" class="pilcrow">¶</a></p>
+</li>
+            </ul>
+</li>
+          <li id="section-5.2-2.5">
+            <p id="section-5.2-2.5.1"><strong>Return CRDC</strong>: Package <code>format</code>, <code>release_token</code>, and <code>releasable_credential</code> into the CRDC JSON object and return it to the Verifier via the presentation protocol (e.g., over the W3C Digital Credentials API).<a href="#section-5.2-2.5.1" class="pilcrow">¶</a></p>
+</li>
+        </ol>
+</section>
+</div>
+<div id="redemption-flow">
+<section id="section-5.3">
+        <h3 id="name-release-token-redemption-ve">
+<a href="#section-5.3" class="section-number selfRef">5.3. </a><a href="#name-release-token-redemption-ve" class="section-name selfRef">Release Token Redemption (Verifier to Issuer)</a>
+        </h3>
+<p id="section-5.3-1">When a Verifier receives a Conditionally Released Digital Credential (<code>CRDC</code>), it <span class="bcp14">MUST</span> perform the following steps to obtain the ephemeral decryption key:<a href="#section-5.3-1" class="pilcrow">¶</a></p>
+<ol start="1" type="1" class="normal type-1" id="section-5.3-2">
+<li id="section-5.3-2.1">
+            <p id="section-5.3-2.1.1"><strong>Parse Release Token Header</strong>: Base64url-decode the JWE Protected Header of <code>release_token</code> and extract the <code>iss</code> claim (and optional <code>cr_ep</code> claim).<a href="#section-5.3-2.1.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="section-5.3-2.2">
+            <p id="section-5.3-2.2.1"><strong>Resolve Release Endpoint</strong>: Determine the Issuer's <code>credential_release_endpoint</code> from the Verifier's pre-configured trust store or by fetching the Issuer Metadata from <code>iss</code> (e.g., <code>/.well-known/openid-credential-issuer</code>). The Verifier <span class="bcp14">MUST</span> verify that <code>iss</code> is a trusted Issuer before sending a request.<a href="#section-5.3-2.2.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="section-5.3-2.3">
+            <p id="section-5.3-2.3.1"><strong>Send Release Request</strong>: Send an HTTP <code>POST</code> request to the Issuer's <code>credential_release_endpoint</code> with content type <code>application/json</code>. The Verifier <span class="bcp14">MUST</span> authenticate itself to the Issuer (for example, using an OAuth 2.0 Bearer access token <span>[<a href="#RFC6750" class="cite xref">RFC6750</a>]</span>, mutual TLS <span>[<a href="#RFC8705" class="cite xref">RFC8705</a>]</span>, or <code>private_key_jwt</code> client authentication). The request body <span class="bcp14">MUST</span> be a JSON object containing:<a href="#section-5.3-2.3.1" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-5.3-2.3.2.1">
+                <p id="section-5.3-2.3.2.1.1"><code>release_token</code>: <span class="bcp14">REQUIRED</span>. The exact <code>release_token</code> string received in the CRDC.<a href="#section-5.3-2.3.2.1.1" class="pilcrow">¶</a></p>
+</li>
+            </ul>
+</li>
+        </ol>
+<p id="section-5.3-3">Example Release Request:<a href="#section-5.3-3" class="pilcrow">¶</a></p>
+<div class="lang-http sourcecode" id="section-5.3-4">
+<pre>
+POST /release HTTP/1.1
+Host: issuer.example.com
+Authorization: Bearer eyJhbGciOiJSUzI1NiIs...
+Content-Type: application/json
+
+{
+  "release_token": "eyJhbGciOiJFQ0RILUVTK0EyNTZLVyIsImVuYyI6IkEyNTZHQ00i..."
+}
+</pre><a href="#section-5.3-4" class="pilcrow">¶</a>
+</div>
+<ol start="1" type="1" class="normal type-1" id="section-5.3-5">
+<li id="section-5.3-5.1">
+            <p id="section-5.3-5.1.1"><strong>Issuer Processing and Approval</strong>: Upon receiving the request at <code>credential_release_endpoint</code>, the Issuer:<a href="#section-5.3-5.1.1" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-5.3-5.1.2.1">
+                <p id="section-5.3-5.1.2.1.1">Authenticates the Verifier and verifies that the Verifier has an active commercial/trust relationship and sufficient quota or billing authorization.<a href="#section-5.3-5.1.2.1.1" class="pilcrow">¶</a></p>
+</li>
+              <li class="normal" id="section-5.3-5.1.2.2">
+                <p id="section-5.3-5.1.2.2.1">Looks up the private key (<code>SK_I</code>) corresponding to the <code>kid</code> in the JWE Protected Header of <code>release_token</code>.<a href="#section-5.3-5.1.2.2.1" class="pilcrow">¶</a></p>
+</li>
+              <li class="normal" id="section-5.3-5.1.2.3">
+                <p id="section-5.3-5.1.2.3.1">Decrypts and verifies the integrity of <code>release_token</code> using <code>SK_I</code>. If decryption fails, the Issuer <span class="bcp14">MUST</span> return an HTTP <code>400 Bad Request</code> error with error code <code>"invalid_release_token"</code> and <span class="bcp14">MUST NOT</span> bill the Verifier.<a href="#section-5.3-5.1.2.3.1" class="pilcrow">¶</a></p>
+</li>
+              <li class="normal" id="section-5.3-5.1.2.4">
+                <p id="section-5.3-5.1.2.4.1">Records the billable transaction against the Verifier's account.<a href="#section-5.3-5.1.2.4.1" class="pilcrow">¶</a></p>
+</li>
+              <li class="normal" id="section-5.3-5.1.2.5">
+                <p id="section-5.3-5.1.2.5.1">Returns an HTTP <code>200 OK</code> response with <code>Content-Type: application/json</code> and <code>Cache-Control: no-store</code> containing the released key object (<code>k</code> and <code>enc</code>).<a href="#section-5.3-5.1.2.5.1" class="pilcrow">¶</a></p>
+</li>
+            </ul>
+</li>
+        </ol>
+<p id="section-5.3-6">Example Release Response:<a href="#section-5.3-6" class="pilcrow">¶</a></p>
+<div class="lang-http sourcecode" id="section-5.3-7">
+<pre>
+HTTP/1.1 200 OK
+Content-Type: application/json
+Cache-Control: no-store
+
+{
+  "k": "f83j2k1l0m9n8b7v6c5x4z3a2s1d0f9g8h7j6k5l4m3",
+  "enc": "A256GCM"
+}
+</pre><a href="#section-5.3-7" class="pilcrow">¶</a>
+</div>
+</section>
+</div>
+<div id="verification-flow">
+<section id="section-5.4">
+        <h3 id="name-unwrapping-and-verification">
+<a href="#section-5.4" class="section-number selfRef">5.4. </a><a href="#name-unwrapping-and-verification" class="section-name selfRef">Unwrapping and Verification by the Verifier</a>
+        </h3>
+<p id="section-5.4-1">Upon receiving the HTTP <code>200 OK</code> response from the Issuer's Credential Release Endpoint, the Verifier <span class="bcp14">MUST</span> perform the following steps:<a href="#section-5.4-1" class="pilcrow">¶</a></p>
+<ol start="1" type="1" class="normal type-1" id="section-5.4-2">
+<li id="section-5.4-2.1">
+            <p id="section-5.4-2.1.1"><strong>Extract Ephemeral Key</strong>: Base64url-decode the <code>k</code> parameter from the Issuer's response to obtain the symmetric AES key <code>K</code>.<a href="#section-5.4-2.1.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="section-5.4-2.2">
+            <p id="section-5.4-2.2.1"><strong>Decrypt Releasable Credential</strong>: Using key <code>K</code>, the <code>iv</code>, <code>ciphertext</code>, and <code>tag</code> from <code>releasable_credential</code>, and the ASCII bytes of <code>release_token</code> as the <code>AAD</code>, perform AES-GCM authenticated decryption. If decryption or tag verification fails, the Verifier <span class="bcp14">MUST</span> abort processing and reject the presentation.<a href="#section-5.4-2.2.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="section-5.4-2.3">
+            <p id="section-5.4-2.3.1"><strong>Validate Underlying Digital Credential</strong>: Parse the decrypted plaintext as the underlying Digital Credential presentation (<code>DC_pres</code>, e.g., an SD-JWT+KB or ISO mdoc <code>DeviceResponse</code>) and perform all standard validation checks required by the underlying format and presentation protocol, including:<a href="#section-5.4-2.3.1" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-5.4-2.3.2.1">
+                <p id="section-5.4-2.3.2.1.1">Verifying the Issuer's cryptographic signature on the credential using the Issuer's signing public key.<a href="#section-5.4-2.3.2.1.1" class="pilcrow">¶</a></p>
+</li>
+              <li class="normal" id="section-5.4-2.3.2.2">
+                <p id="section-5.4-2.3.2.2.1">Verifying that the Issuer of the inner credential matches the <code>iss</code> in the outer <code>release_token</code> header.<a href="#section-5.4-2.3.2.2.1" class="pilcrow">¶</a></p>
+</li>
+              <li class="normal" id="section-5.4-2.3.2.3">
+                <p id="section-5.4-2.3.2.3.1">Verifying Holder Key Binding (<code>kb+jwt</code> or <code>DeviceAuth</code>), ensuring that the <code>nonce</code> and <code>aud</code>/<code>client_id</code> match the Verifier's presentation request.<a href="#section-5.4-2.3.2.3.1" class="pilcrow">¶</a></p>
+</li>
+              <li class="normal" id="section-5.4-2.3.2.4">
+                <p id="section-5.4-2.3.2.4.1">Verifying selectively disclosed claims and credential validity/revocation status.<a href="#section-5.4-2.3.2.4.1" class="pilcrow">¶</a></p>
+</li>
+            </ul>
+</li>
+        </ol>
+</section>
+</div>
+</section>
+</div>
+<div id="examples">
+<section id="section-6">
+      <h2 id="name-examples">
+<a href="#section-6" class="section-number selfRef">6. </a><a href="#name-examples" class="section-name selfRef">Examples</a>
+      </h2>
+<div id="example-metadata">
+<section id="section-6.1">
+        <h3 id="name-issuer-metadata-example">
+<a href="#section-6.1" class="section-number selfRef">6.1. </a><a href="#name-issuer-metadata-example" class="section-name selfRef">Issuer Metadata Example</a>
+        </h3>
+<p id="section-6.1-1">The following non-normative example shows an Issuer publishing its <code>credential_release_endpoint</code> and <code>credential_release_encryption_jwks</code> inside its Credential Issuer Metadata:<a href="#section-6.1-1" class="pilcrow">¶</a></p>
+<div class="lang-json sourcecode" id="section-6.1-2">
+<pre>
+{
+  "credential_issuer": "https://issuer.example.com",
+  "credential_endpoint": "https://issuer.example.com/credential",
+  "credential_release_endpoint": "https://issuer.example.com/release",
+  "credential_release_encryption_jwks": {
+    "keys": [
+      {
+        "kty": "EC",
+        "crv": "P-256",
+        "use": "enc",
+        "alg": "ECDH-ES+A256KW",
+        "kid": "issuer-release-key-2026-q4",
+        "x": "f83OJ3D2xF1Bg8vub9tLe1gHMzV76e8Tus9uPHvRVEU",
+        "y": "x_FEzRu9m36HLN_tue659LNpXW6pCyStikYjKIWI5a0"
+      }
+    ]
+  }
+}
+</pre><a href="#section-6.1-2" class="pilcrow">¶</a>
+</div>
+</section>
+</div>
+<div id="example-sd-jwt-cr">
+<section id="section-6.2">
+        <h3 id="name-conditionally-released-sd-j">
+<a href="#section-6.2" class="section-number selfRef">6.2. </a><a href="#name-conditionally-released-sd-j" class="section-name selfRef">Conditionally Released SD-JWT (<code>dc+sd-jwt-cr</code>)</a>
+        </h3>
+<p id="section-6.2-1">When wrapping an SD-JWT+KB presentation (<code>&lt;Issuer-signed JWT&gt;~&lt;Disclosure 1&gt;~...~&lt;KB-JWT&gt;</code>), the Credential Manager encrypts the UTF-8 octets of the complete SD-JWT+KB string into <code>releasable_credential</code> and returns:<a href="#section-6.2-1" class="pilcrow">¶</a></p>
+<div class="lang-json sourcecode" id="section-6.2-2">
+<pre>
+{
+  "format": "dc+sd-jwt-cr",
+  "release_token": "eyJhbGciOiJFQ0RILUVTK0EyNTZLVyIsImVuYyI6IkEyNTZHQ00iLCJ0eXAiOiJjcmRjLXJlbGVhc2UranVlIiwia2lkIjoiaXNzdWVyLXJlbGVhc2Uta2V5LTIwMjYtcTQiLCJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlLmNvbSIsImVwayI6eyJrdHkiOiJFQyIsImNydiI6IlAtMjU2IiwieCI6IjI5c19HVjB4Li4uIiwieSI6IjhsMl9IUjB5Li4uIn19.dGhpcy1pcy10aGUtencrypted-cek.aXYtYnl0ZXM.Y2lwaGVydGV4dC1ieXRlcw.dGFnLWJ5dGVz",
+  "releasable_credential": {
+    "enc": "A256GCM",
+    "iv": "MTIzNDU2Nzg5MDEy",
+    "ciphertext": "V2hlbiBkZWNyeXB0ZWQsIHRoaXMgaXMgdGhlIGZ1bGwgU0QtSldUK0tCIHN0cmluZyh...",
+    "tag": "YWJjZGVmZ2hpamtsbW5vcA"
+  }
+}
+</pre><a href="#section-6.2-2" class="pilcrow">¶</a>
+</div>
+</section>
+</div>
+<div id="example-mdoc-cr">
+<section id="section-6.3">
+        <h3 id="name-conditionally-released-iso-">
+<a href="#section-6.3" class="section-number selfRef">6.3. </a><a href="#name-conditionally-released-iso-" class="section-name selfRef">Conditionally Released ISO mdoc (<code>mso_mdoc-cr</code>)</a>
+        </h3>
+<p id="section-6.3-1">When wrapping an ISO/IEC 18013-5 <code>DeviceResponse</code> CBOR structure, the Credential Manager encrypts the raw CBOR octets of <code>DeviceResponse</code> into <code>releasable_credential</code> and sets <code>"format": "mso_mdoc-cr"</code>. Upon decrypting <code>releasable_credential.ciphertext</code>, the Verifier obtains the exact CBOR bytes of <code>DeviceResponse</code> and validates the <code>IssuerAuth</code> COSE_Sign1 and <code>DeviceAuth</code> structures as normal.<a href="#section-6.3-1" class="pilcrow">¶</a></p>
+</section>
+</div>
+</section>
+</div>
+<div id="security-considerations">
+<section id="section-7">
+      <h2 id="name-security-considerations">
+<a href="#section-7" class="section-number selfRef">7. </a><a href="#name-security-considerations" class="section-name selfRef">Security Considerations</a>
+      </h2>
+<div id="sec-entropy">
+<section id="section-7.1">
+        <h3 id="name-ephemeral-key-entropy-and-n">
+<a href="#section-7.1" class="section-number selfRef">7.1. </a><a href="#name-ephemeral-key-entropy-and-n" class="section-name selfRef">Ephemeral Key Entropy and Nonce Uniqueness</a>
+        </h3>
+<p id="section-7.1-1">The security of the Releasable Credential relies on the unpredictability of the one-time ephemeral AES key <code>K</code>. Credential Managers <span class="bcp14">MUST</span> generate a fresh, cryptographically random key <code>K</code> and <code>IV</code> for every presentation. Reusing <code>K</code> across presentations would allow a Verifier that paid for one presentation to decrypt another presentation without Issuer approval, and would enable correlation across presentations.<a href="#section-7.1-1" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="sec-binding">
+<section id="section-7.2">
+        <h3 id="name-binding-between-releasable-">
+<a href="#section-7.2" class="section-number selfRef">7.2. </a><a href="#name-binding-between-releasable-" class="section-name selfRef">Binding Between Releasable Credential and Release Token</a>
+        </h3>
+<p id="section-7.2-1">By passing the ASCII representation of <code>release_token</code> as Additional Authenticated Data (<code>AAD</code>) when encrypting <code>releasable_credential</code>, the two structures are cryptographically bound. An attacker cannot strip a <code>release_token</code> from one CRDC and attach it to a different <code>releasable_credential</code> without causing AEAD tag verification to fail.<a href="#section-7.2-1" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="sec-inner-issuer">
+<section id="section-7.3">
+        <h3 id="name-inner-issuer-verification-a">
+<a href="#section-7.3" class="section-number selfRef">7.3. </a><a href="#name-inner-issuer-verification-a" class="section-name selfRef">Inner Issuer Verification Against Outer Release Token Issuer</a>
+        </h3>
+<p id="section-7.3-1">A malicious Issuer <code>M</code> could attempt to wrap a credential issued by honest Issuer <code>H</code> under <code>M</code>'s Release Public Key in order to collect fees meant for <code>H</code>. To prevent this, as specified in <a href="#verification-flow" class="auto internal xref">Section 5.4</a>, the Verifier <span class="bcp14">MUST</span> verify after decrypting the Releasable Credential that the cryptographic Issuer of the inner Digital Credential matches the <code>iss</code> claimed in the outer <code>release_token</code> JWE Protected Header.<a href="#section-7.3-1" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="sec-holder-key-binding">
+<section id="section-7.4">
+        <h3 id="name-inner-holder-key-binding">
+<a href="#section-7.4" class="section-number selfRef">7.4. </a><a href="#name-inner-holder-key-binding" class="section-name selfRef">Inner Holder Key Binding</a>
+        </h3>
+<p id="section-7.4-1">The CRDC wrapper provides conditional confidentiality of the presentation until Issuer approval, but does not replace the inner credential's Holder Key Binding. The inner Digital Credential presentation (e.g., SD-JWT+KB or mdoc <code>DeviceResponse</code>) <span class="bcp14">MUST</span> still include cryptographic Holder Key Binding over the Verifier's <code>nonce</code> and <code>aud</code>/<code>client_id</code>. This ensures that even after decryption, the Verifier has cryptographic proof that the Holder consented to present the credential to that specific Verifier in that specific session.<a href="#section-7.4-1" class="pilcrow">¶</a></p>
+</section>
+</div>
+</section>
+</div>
+<div id="privacy-considerations">
+<section id="section-8">
+      <h2 id="name-privacy-considerations">
+<a href="#section-8" class="section-number selfRef">8. </a><a href="#name-privacy-considerations" class="section-name selfRef">Privacy Considerations</a>
+      </h2>
+<div id="privacy-cohort">
+<section id="section-8.1">
+        <h3 id="name-unlinkability-against-the-i">
+<a href="#section-8.1" class="section-number selfRef">8.1. </a><a href="#name-unlinkability-against-the-i" class="section-name selfRef">Unlinkability Against the Issuer (Shared Key Cohort Requirements)</a>
+        </h3>
+<p id="section-8.1-1">The primary privacy guarantee of Conditionally Released Digital Credentials is that the Issuer can authorize and bill a Verifier for a presentation without learning which Holder's credential is being presented.<a href="#section-8.1-1" class="pilcrow">¶</a></p>
+<p id="section-8.1-2">To uphold this guarantee:<a href="#section-8.1-2" class="pilcrow">¶</a></p>
+<ol start="1" type="1" class="normal type-1" id="section-8.1-3">
+<li id="section-8.1-3.1">
+            <p id="section-8.1-3.1.1"><strong>No Per-Holder Release Keys</strong>: The Issuer <span class="bcp14">MUST NOT</span> provision unique or fine-grained <strong>Issuer Release Public Keys</strong> (<code>PK_I</code> / <code>kid</code>) to individual Holders or small cohorts of Holders. If an Issuer assigned a distinct <code>PK_I</code> to each Holder, the <code>kid</code> (or successful trial decryption) at the Release Endpoint would immediately reveal which Holder is presenting their credential to the Verifier. Issuers <span class="bcp14">MUST</span> share each Issuer Release Public Key across a large anonymity cohort (e.g., all credentials of a given type issued within a broad time window).<a href="#section-8.1-3.1.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="section-8.1-3.2">
+            <p id="section-8.1-3.2.1"><strong>No Holder-Identifying Metadata in the Release Token</strong>: The Credential Manager <span class="bcp14">MUST NOT</span> include any Holder identifier, credential serial number, issuance timestamp, or static salt inside either the JWE Protected Header or the encrypted payload of the <code>release_token</code>. Both the ephemeral asymmetric key (<code>epk</code>) used in JWE key agreement and the ephemeral symmetric key (<code>K</code>) inside the JWE payload <span class="bcp14">MUST</span> be freshly generated at presentation time.<a href="#section-8.1-3.2.1" class="pilcrow">¶</a></p>
+</li>
+        </ol>
+</section>
+</div>
+<div id="privacy-confidentiality">
+<section id="section-8.2">
+        <h3 id="name-confidentiality-of-claims-a">
+<a href="#section-8.2" class="section-number selfRef">8.2. </a><a href="#name-confidentiality-of-claims-a" class="section-name selfRef">Confidentiality of Claims Against the Issuer</a>
+        </h3>
+<p id="section-8.2-1">Because the Verifier only sends the <code>release_token</code> to the Issuer's Release Endpoint and never sends the <code>releasable_credential</code>, the Issuer never sees the underlying credential, the Holder's selectively disclosed claims, or the Verifier's session nonce.<a href="#section-8.2-1" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="privacy-timing">
+<section id="section-8.3">
+        <h3 id="name-timing-and-network-correlat">
+<a href="#section-8.3" class="section-number selfRef">8.3. </a><a href="#name-timing-and-network-correlat" class="section-name selfRef">Timing and Network Correlation Mitigations</a>
+        </h3>
+<p id="section-8.3-1">If an Issuer issues a credential to a Holder and the Holder immediately presents that credential to a Verifier milliseconds later, the Issuer could attempt to correlate the issuance event with the Verifier's Release Token redemption by timing alone. Credential Managers <span class="bcp14">SHOULD</span> pre-provision credentials and Issuer Release Public Keys ahead of presentation time, or introduce jitter when issuance and presentation occur back-to-back.<a href="#section-8.3-1" class="pilcrow">¶</a></p>
+</section>
+</div>
+</section>
+</div>
+<div id="iana-considerations">
+<section id="section-9">
+      <h2 id="name-iana-considerations">
+<a href="#section-9" class="section-number selfRef">9. </a><a href="#name-iana-considerations" class="section-name selfRef">IANA Considerations</a>
+      </h2>
+<div id="iana-metadata">
+<section id="section-9.1">
+        <h3 id="name-oauth-authorization-server-">
+<a href="#section-9.1" class="section-number selfRef">9.1. </a><a href="#name-oauth-authorization-server-" class="section-name selfRef">OAuth Authorization Server / Credential Issuer Metadata Registry</a>
+        </h3>
+<p id="section-9.1-1">This specification requests registration of the following metadata parameters:<a href="#section-9.1-1" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-9.1-2.1">
+            <p id="section-9.1-2.1.1"><code>credential_release_endpoint</code>: URL of the Issuer's Credential Release Endpoint.<a href="#section-9.1-2.1.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-9.1-2.2">
+            <p id="section-9.1-2.2.1"><code>credential_release_encryption_jwks</code>: JWKS containing the Issuer Release Public Keys.<a href="#section-9.1-2.2.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-9.1-2.3">
+            <p id="section-9.1-2.3.1"><code>credential_release_encryption_jwks_uri</code>: URL of the JWKS containing the Issuer Release Public Keys.<a href="#section-9.1-2.3.1" class="pilcrow">¶</a></p>
+</li>
+        </ul>
+</section>
+</div>
+<div id="iana-media-type">
+<section id="section-9.2">
+        <h3 id="name-media-type-registration">
+<a href="#section-9.2" class="section-number selfRef">9.2. </a><a href="#name-media-type-registration" class="section-name selfRef">Media Type Registration</a>
+        </h3>
+<p id="section-9.2-1">This section registers the <code>"application/crdc-release+jwe"</code> media type (<code>typ</code> shorthand <code>"crdc-release+jwe"</code>) in the IANA "Media Types" registry to identify a Release Token JWE.<a href="#section-9.2-1" class="pilcrow">¶</a></p>
+</section>
+</div>
+</section>
+</div>
+<div id="sec-combined-references">
+<section id="section-10">
+      <h2 id="name-references">
+<a href="#section-10" class="section-number selfRef">10. </a><a href="#name-references" class="section-name selfRef">References</a>
+      </h2>
+<div id="sec-normative-references">
+<section id="section-10.1">
+        <h3 id="name-normative-references">
+<a href="#section-10.1" class="section-number selfRef">10.1. </a><a href="#name-normative-references" class="section-name selfRef">Normative References</a>
+        </h3>
+<dl class="references">
+<dt id="RFC2119">[RFC2119]</dt>
+        <dd>
+<span class="refAuthor">Bradner, S.</span>, <span class="refTitle">"Key words for use in RFCs to Indicate Requirement Levels"</span>, <span class="seriesInfo">BCP 14</span>, <span class="seriesInfo">RFC 2119</span>, <span class="seriesInfo">DOI 10.17487/RFC2119</span>, <time datetime="1997-03" class="refDate">March 1997</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc2119">https://www.rfc-editor.org/rfc/rfc2119</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC4086">[RFC4086]</dt>
+        <dd>
+<span class="refAuthor">Eastlake 3rd, D.</span>, <span class="refAuthor">Schiller, J.</span>, and <span class="refAuthor">S. Crocker</span>, <span class="refTitle">"Randomness Requirements for Security"</span>, <span class="seriesInfo">BCP 106</span>, <span class="seriesInfo">RFC 4086</span>, <span class="seriesInfo">DOI 10.17487/RFC4086</span>, <time datetime="2005-06" class="refDate">June 2005</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc4086">https://www.rfc-editor.org/rfc/rfc4086</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC7515">[RFC7515]</dt>
+        <dd>
+<span class="refAuthor">Jones, M.</span>, <span class="refAuthor">Bradley, J.</span>, and <span class="refAuthor">N. Sakimura</span>, <span class="refTitle">"JSON Web Signature (JWS)"</span>, <span class="seriesInfo">RFC 7515</span>, <span class="seriesInfo">DOI 10.17487/RFC7515</span>, <time datetime="2015-05" class="refDate">May 2015</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc7515">https://www.rfc-editor.org/rfc/rfc7515</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC7516">[RFC7516]</dt>
+        <dd>
+<span class="refAuthor">Jones, M.</span> and <span class="refAuthor">J. Hildebrand</span>, <span class="refTitle">"JSON Web Encryption (JWE)"</span>, <span class="seriesInfo">RFC 7516</span>, <span class="seriesInfo">DOI 10.17487/RFC7516</span>, <time datetime="2015-05" class="refDate">May 2015</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc7516">https://www.rfc-editor.org/rfc/rfc7516</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC7517">[RFC7517]</dt>
+        <dd>
+<span class="refAuthor">Jones, M.</span>, <span class="refTitle">"JSON Web Key (JWK)"</span>, <span class="seriesInfo">RFC 7517</span>, <span class="seriesInfo">DOI 10.17487/RFC7517</span>, <time datetime="2015-05" class="refDate">May 2015</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc7517">https://www.rfc-editor.org/rfc/rfc7517</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC7518">[RFC7518]</dt>
+        <dd>
+<span class="refAuthor">Jones, M.</span>, <span class="refTitle">"JSON Web Algorithms (JWA)"</span>, <span class="seriesInfo">RFC 7518</span>, <span class="seriesInfo">DOI 10.17487/RFC7518</span>, <time datetime="2015-05" class="refDate">May 2015</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc7518">https://www.rfc-editor.org/rfc/rfc7518</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC8174">[RFC8174]</dt>
+        <dd>
+<span class="refAuthor">Leiba, B.</span>, <span class="refTitle">"Ambiguity of Uppercase vs Lowercase in RFC 2119 Key Words"</span>, <span class="seriesInfo">BCP 14</span>, <span class="seriesInfo">RFC 8174</span>, <span class="seriesInfo">DOI 10.17487/RFC8174</span>, <time datetime="2017-05" class="refDate">May 2017</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc8174">https://www.rfc-editor.org/rfc/rfc8174</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC9901">[RFC9901]</dt>
+      <dd>
+<span class="refAuthor">Fett, D.</span>, <span class="refAuthor">Yasuda, K.</span>, and <span class="refAuthor">B. Campbell</span>, <span class="refTitle">"Selective Disclosure for JSON Web Tokens"</span>, <span class="seriesInfo">RFC 9901</span>, <span class="seriesInfo">DOI 10.17487/RFC9901</span>, <time datetime="2025-11" class="refDate">November 2025</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc9901">https://www.rfc-editor.org/rfc/rfc9901</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+</dl>
+</section>
+</div>
+<div id="sec-informative-references">
+<section id="section-10.2">
+        <h3 id="name-informative-references">
+<a href="#section-10.2" class="section-number selfRef">10.2. </a><a href="#name-informative-references" class="section-name selfRef">Informative References</a>
+        </h3>
+<dl class="references">
+<dt id="ISO.18013-5">[ISO.18013-5]</dt>
+        <dd>
+<span class="refAuthor">ISO/IEC</span>, <span class="refTitle">"Personal identification — ISO-compliant driving licence — Part 5: Mobile driving licence (mDL) application"</span>, <span class="seriesInfo">ISO/IEC 18013-5:2021</span>, <time datetime="2021-09" class="refDate">September 2021</time>. </dd>
+<dd class="break"></dd>
+<dt id="OpenID4VCI">[OpenID4VCI]</dt>
+        <dd>
+<span class="refAuthor">Lodderstedt, T.</span>, <span class="refAuthor">Yasuda, K.</span>, and <span class="refAuthor">T. Looker</span>, <span class="refTitle">"OpenID for Verifiable Credential Issuance"</span>, <time datetime="2025" class="refDate">2025</time>, <span>&lt;<a href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html">https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="OpenID4VP">[OpenID4VP]</dt>
+        <dd>
+<span class="refAuthor">Terbu, O.</span>, <span class="refAuthor">Lodderstedt, T.</span>, <span class="refAuthor">Yasuda, K.</span>, and <span class="refAuthor">T. Looker</span>, <span class="refTitle">"OpenID for Verifiable Presentations"</span>, <time datetime="2025" class="refDate">2025</time>, <span>&lt;<a href="https://openid.net/specs/openid-4-verifiable-presentations-1_0.html">https://openid.net/specs/openid-4-verifiable-presentations-1_0.html</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC6750">[RFC6750]</dt>
+        <dd>
+<span class="refAuthor">Jones, M.</span> and <span class="refAuthor">D. Hardt</span>, <span class="refTitle">"The OAuth 2.0 Authorization Framework: Bearer Token Usage"</span>, <span class="seriesInfo">RFC 6750</span>, <span class="seriesInfo">DOI 10.17487/RFC6750</span>, <time datetime="2012-10" class="refDate">October 2012</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc6750">https://www.rfc-editor.org/rfc/rfc6750</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC8414">[RFC8414]</dt>
+        <dd>
+<span class="refAuthor">Jones, M.</span>, <span class="refAuthor">Sakimura, N.</span>, and <span class="refAuthor">J. Bradley</span>, <span class="refTitle">"OAuth 2.0 Authorization Server Metadata"</span>, <span class="seriesInfo">RFC 8414</span>, <span class="seriesInfo">DOI 10.17487/RFC8414</span>, <time datetime="2018-06" class="refDate">June 2018</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc8414">https://www.rfc-editor.org/rfc/rfc8414</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC8705">[RFC8705]</dt>
+        <dd>
+<span class="refAuthor">Campbell, B.</span>, <span class="refAuthor">Bradley, J.</span>, <span class="refAuthor">Sakimura, N.</span>, and <span class="refAuthor">T. Lodderstedt</span>, <span class="refTitle">"OAuth 2.0 Mutual-TLS Client Authentication and Certificate-Bound Access Tokens"</span>, <span class="seriesInfo">RFC 8705</span>, <span class="seriesInfo">DOI 10.17487/RFC8705</span>, <time datetime="2020-02" class="refDate">February 2020</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc8705">https://www.rfc-editor.org/rfc/rfc8705</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC9180">[RFC9180]</dt>
+        <dd>
+<span class="refAuthor">Barnes, R.</span>, <span class="refAuthor">Bhargavan, K.</span>, <span class="refAuthor">Lipp, B.</span>, and <span class="refAuthor">C. Wood</span>, <span class="refTitle">"Hybrid Public Key Encryption"</span>, <span class="seriesInfo">RFC 9180</span>, <span class="seriesInfo">DOI 10.17487/RFC9180</span>, <time datetime="2022-02" class="refDate">February 2022</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc9180">https://www.rfc-editor.org/rfc/rfc9180</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC9458">[RFC9458]</dt>
+        <dd>
+<span class="refAuthor">Thomson, M.</span> and <span class="refAuthor">C. A. Wood</span>, <span class="refTitle">"Oblivious HTTP"</span>, <span class="seriesInfo">RFC 9458</span>, <span class="seriesInfo">DOI 10.17487/RFC9458</span>, <time datetime="2024-01" class="refDate">January 2024</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc9458">https://www.rfc-editor.org/rfc/rfc9458</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="SD-JWT-VC">[SD-JWT-VC]</dt>
+        <dd>
+<span class="refAuthor">Terbu, O.</span>, <span class="refAuthor">Fett, D.</span>, and <span class="refAuthor">B. Campbell</span>, <span class="refTitle">"SD-JWT-based Verifiable Credentials (SD-JWT VC)"</span>, <time datetime="2025" class="refDate">2025</time>, <span>&lt;<a href="https://datatracker.ietf.org/doc/draft-ietf-oauth-sd-jwt-vc/">https://datatracker.ietf.org/doc/draft-ietf-oauth-sd-jwt-vc/</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="W3C.DC-API">[W3C.DC-API]</dt>
+      <dd>
+<span class="refAuthor">Caceres, M.</span>, <span class="refAuthor">Yasuda, K.</span>, and <span class="refAuthor">S. Goto</span>, <span class="refTitle">"Digital Credentials"</span>, <time datetime="2025" class="refDate">2025</time>, <span>&lt;<a href="https://wicg.github.io/digital-credentials/">https://wicg.github.io/digital-credentials/</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+</dl>
+</section>
+</div>
+</section>
+</div>
+<div id="authors-addresses">
+<section id="appendix-A">
+      <h2 id="name-authors-address">
+<a href="#name-authors-address" class="section-name selfRef">Author's Address</a>
+      </h2>
+<address class="vcard">
+        <div dir="auto" class="left"><span class="fn nameRole">Lee Campbell</span></div>
+<div dir="auto" class="left"><span class="org">Google</span></div>
+<div class="email">
+<span>Email:</span>
+<a href="mailto:leecam@google.com" class="email">leecam@google.com</a>
+</div>
+</address>
+</section>
+</div>
+<script>const toc = document.getElementById("toc");
+toc.querySelector("h2").addEventListener("click", e => {
+  toc.classList.toggle("active");
+});
+toc.querySelector("nav").addEventListener("click", e => {
+  toc.classList.remove("active");
+});
+</script>
+</body>
+</html>

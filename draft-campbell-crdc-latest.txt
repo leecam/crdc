@@ -1,0 +1,1344 @@
+
+
+
+
+OAuth Working Group                                          L. Campbell
+Internet-Draft                                                    Google
+Intended status: Standards Track                          6 October 2026
+Expires: 9 April 2027
+
+
+               Conditionally Released Digital Credentials
+                         draft-campbell-crdc-00
+
+Abstract
+
+   Digital Credentials (DCs), such as Selective Disclosure for JSON Web
+   Tokens (SD-JWTs) and ISO/IEC 18013-5 mobile documents (mdocs), are
+   issued by Issuers to Credential Managers (wallets) held by Holders.
+   Verifiers can then request these credentials from the Credential
+   Manager using presentation protocols such as OpenID for Verifiable
+   Presentations (OpenID4VP) and browser APIs such as the W3C Digital
+   Credentials API.  A foundational privacy property of this three-party
+   model is Issuer unlinkability: the Issuer does not learn when, where,
+   or to which Verifier a given credential is presented.  However, in
+   many commercial and regulatory ecosystems, Issuers require a
+   mechanism to charge or authorize Verifiers for credential
+   presentations.
+
+   This specification defines a credential-format-agnostic mechanism for
+   Conditionally Released Digital Credentials (CRDCs).  During
+   presentation, the Credential Manager encrypts a standard Digital
+   Credential presentation using a one-time ephemeral Content Encryption
+   Key (CEK) to produce a Releasable Credential, and encrypts the CEK
+   under an Issuer Release Public Key alongside Issuer routing metadata
+   to produce a Release Token.  The Verifier presents the Release Token
+   to the Issuer's Release Endpoint to authorize (and optionally bill
+   for) the presentation and obtain the decrypted CEK, which the
+   Verifier then uses to decrypt and validate the underlying Digital
+   Credential—all while strictly preserving the privacy property that
+   the Issuer never learns which Holder is presenting the credential.
+
+Status of This Memo
+
+   This Internet-Draft is submitted in full conformance with the
+   provisions of BCP 78 and BCP 79.
+
+   Internet-Drafts are working documents of the Internet Engineering
+   Task Force (IETF).  Note that other groups may also distribute
+   working documents as Internet-Drafts.  The list of current Internet-
+   Drafts is at https://datatracker.ietf.org/drafts/current/.
+
+
+
+
+
+Campbell                  Expires 9 April 2027                  [Page 1]
+
+Internet-Draft                    CRDC                      October 2026
+
+
+   Internet-Drafts are draft documents valid for a maximum of six months
+   and may be updated, replaced, or obsoleted by other documents at any
+   time.  It is inappropriate to use Internet-Drafts as reference
+   material or to cite them other than as "work in progress."
+
+   This Internet-Draft will expire on 9 April 2027.
+
+Copyright Notice
+
+   Copyright (c) 2026 IETF Trust and the persons identified as the
+   document authors.  All rights reserved.
+
+   This document is subject to BCP 78 and the IETF Trust's Legal
+   Provisions Relating to IETF Documents (https://trustee.ietf.org/
+   license-info) in effect on the date of publication of this document.
+   Please review these documents carefully, as they describe your rights
+   and restrictions with respect to this document.  Code Components
+   extracted from this document must include Revised BSD License text as
+   described in Section 4.e of the Trust Legal Provisions and are
+   provided without warranty as described in the Revised BSD License.
+
+Table of Contents
+
+   1.  Introduction  . . . . . . . . . . . . . . . . . . . . . . . .   3
+     1.1.  Design Rationale and Goals  . . . . . . . . . . . . . . .   4
+     1.2.  Feature Summary . . . . . . . . . . . . . . . . . . . . .   5
+     1.3.  Conventions and Terminology . . . . . . . . . . . . . . .   6
+   2.  Architecture and Flow Diagram . . . . . . . . . . . . . . . .   7
+   3.  Concepts  . . . . . . . . . . . . . . . . . . . . . . . . . .   8
+     3.1.  Issuer Release Public Key Provisioning  . . . . . . . . .   8
+     3.2.  Releasable Credential and Release Token . . . . . . . . .   9
+     3.3.  Conditionally Released Digital Credential (CRDC)  . . . .   9
+     3.4.  Credential Release Redemption and Verification  . . . . .  10
+   4.  Data Formats and Cryptographic Wrapper  . . . . . . . . . . .  10
+     4.1.  Issuer Metadata Parameters  . . . . . . . . . . . . . . .  11
+     4.2.  Releasable Credential Format  . . . . . . . . . . . . . .  11
+     4.3.  Release Token Format  . . . . . . . . . . . . . . . . . .  12
+       4.3.1.  Release Token JWE Protected Header  . . . . . . . . .  12
+       4.3.2.  Release Token Plaintext Payload . . . . . . . . . . .  13
+     4.4.  Conditionally Released Digital Credential (CRDC)
+           Envelope  . . . . . . . . . . . . . . . . . . . . . . . .  13
+     4.5.  Presentation Format Identifiers (-cr Suffix
+           Convention) . . . . . . . . . . . . . . . . . . . . . . .  14
+   5.  Protocol Flow and Processing Rules  . . . . . . . . . . . . .  15
+     5.1.  Issuance and Key Discovery  . . . . . . . . . . . . . . .  15
+     5.2.  Presentation by the Credential Manager  . . . . . . . . .  15
+     5.3.  Release Token Redemption (Verifier to Issuer) . . . . . .  16
+     5.4.  Unwrapping and Verification by the Verifier . . . . . . .  18
+
+
+
+Campbell                  Expires 9 April 2027                  [Page 2]
+
+Internet-Draft                    CRDC                      October 2026
+
+
+   6.  Examples  . . . . . . . . . . . . . . . . . . . . . . . . . .  19
+     6.1.  Issuer Metadata Example . . . . . . . . . . . . . . . . .  19
+     6.2.  Conditionally Released SD-JWT (dc+sd-jwt-cr)  . . . . . .  19
+     6.3.  Conditionally Released ISO mdoc (mso_mdoc-cr) . . . . . .  20
+   7.  Security Considerations . . . . . . . . . . . . . . . . . . .  20
+     7.1.  Ephemeral Key Entropy and Nonce Uniqueness  . . . . . . .  20
+     7.2.  Binding Between Releasable Credential and Release
+           Token . . . . . . . . . . . . . . . . . . . . . . . . . .  20
+     7.3.  Inner Issuer Verification Against Outer Release Token
+           Issuer  . . . . . . . . . . . . . . . . . . . . . . . . .  20
+     7.4.  Inner Holder Key Binding  . . . . . . . . . . . . . . . .  20
+   8.  Privacy Considerations  . . . . . . . . . . . . . . . . . . .  21
+     8.1.  Unlinkability Against the Issuer (Shared Key Cohort
+           Requirements) . . . . . . . . . . . . . . . . . . . . . .  21
+     8.2.  Confidentiality of Claims Against the Issuer  . . . . . .  21
+     8.3.  Timing and Network Correlation Mitigations  . . . . . . .  21
+   9.  IANA Considerations . . . . . . . . . . . . . . . . . . . . .  22
+     9.1.  OAuth Authorization Server / Credential Issuer Metadata
+           Registry  . . . . . . . . . . . . . . . . . . . . . . . .  22
+     9.2.  Media Type Registration . . . . . . . . . . . . . . . . .  22
+   10. References  . . . . . . . . . . . . . . . . . . . . . . . . .  22
+     10.1.  Normative References . . . . . . . . . . . . . . . . . .  22
+     10.2.  Informative References . . . . . . . . . . . . . . . . .  23
+   Author's Address  . . . . . . . . . . . . . . . . . . . . . . . .  24
+
+1.  Introduction
+
+   In the modern digital identity ecosystem, Digital Credentials
+   (DCs)—such as Selective Disclosure for JSON Web Tokens (SD-JWTs)
+   [RFC9901] and ISO/IEC 18013-5 mobile documents (mdocs)
+   [ISO.18013-5]—are issued by Issuers to Credential Managers (commonly
+   referred to as digital wallets) controlled by Holders.  Verifiers can
+   then request these Digital Credentials from the Holder's Credential
+   Manager using presentation protocols such as OpenID for Verifiable
+   Presentations [OpenID4VP] invoked over platform and browser surfaces
+   like the W3C Digital Credentials API [W3C.DC-API].
+
+   A core privacy tenet of this three-party model (Issuer, Holder/
+   Credential Manager, and Verifier) is that the issuance of a
+   credential is decoupled from its presentation.  In particular, the
+   Issuer does not participate in the presentation flow in a way that
+   reveals the identity of the Holder to the Issuer at the time of
+   presentation.  Consequently, the Issuer does not learn which Holder
+   is presenting their credential, nor where a specific Holder presents
+   their credential.
+
+
+
+
+
+
+Campbell                  Expires 9 April 2027                  [Page 3]
+
+Internet-Draft                    CRDC                      October 2026
+
+
+   At the same time, certain high-value credential ecosystems require
+   sustainable business models where Issuers charge Verifiers for
+   credential presentations (for example, identity verification
+   providers, financial institutions, or authoritative registries
+   charging relying parties per verified transaction).  In traditional
+   federated identity protocols where the Identity Provider (IdP) is
+   directly in the loop during authentication, billing a Relying Party
+   is straightforward but comes at the cost of the IdP learning every
+   Relying Party a specific user visits.  Conversely, in the offline or
+   decoupled three-party Digital Credentials model, because the
+   Credential Manager releases the credential directly to the Verifier,
+   the Issuer has no native mechanism to enforce that a Verifier is
+   authorized or billed for a presentation without re-introducing a
+   Holder-tracking correlation vector.
+
+   This specification bridges this gap by defining *Conditionally
+   Released Digital Credentials (CRDCs)*. It specifies a credential-
+   format-agnostic cryptographic wrapper around existing credential
+   formats (including SD-JWTs and mdocs) that allows a Credential
+   Manager to release a credential presentation to a Verifier in an
+   encrypted form.  During presentation, the Credential Manager encrypts
+   the underlying Digital Credential presentation using a freshly
+   generated, one-time ephemeral symmetric Content Encryption Key
+   (CEK)—producing the *Releasable Credential*—and encrypts that CEK
+   under the Issuer's *Issuer Release Public Key* inside a *Release
+   Token* that includes the Issuer's identifier.  To unlock and verify
+   the underlying credential claims, the Verifier sends the Release
+   Token to the Issuer's Release Endpoint.  Because the Release Token
+   contains only a freshly generated random key encrypted under a public
+   key shared across a large cohort of credentials, the Issuer can
+   authenticate, authorize, and bill the Verifier before returning the
+   decrypted CEK, without ever learning which Holder or credential was
+   involved in the presentation.
+
+1.1.  Design Rationale and Goals
+
+   This specification is built around four primary design principles:
+
+   1.  *Compatibility with Existing Presentation Ecosystems*: Digital
+       Credentials are issued to Credential Managers (wallets) by
+       Issuers and requested by Verifiers via the W3C Digital
+       Credentials API [W3C.DC-API] and presentation protocols such as
+       OpenID4VP [OpenID4VP].  The conditional release mechanism
+       integrates seamlessly into these existing flows.
+
+   2.  *Preservation of Three-Party Privacy (Holder Unlinkability at the
+       Issuer)*: In the three-party model, the Issuer does not learn
+       where a given Holder presents their credential.  Maintaining this
+
+
+
+Campbell                  Expires 9 April 2027                  [Page 4]
+
+Internet-Draft                    CRDC                      October 2026
+
+
+       privacy property is a strict requirement of this specification:
+       even when the Issuer authorizes and bills the Verifier for
+       releasing the ephemeral decryption key, the Release Token
+       contains zero Holder-identifying or credential-instance-
+       identifying information.
+
+   3.  *Verifiable Issuer Billing and Authorization*: Issuers that wish
+       to charge Verifiers per presentation—or enforce commercial quotas
+       and policy checks—can require the Verifier to redeem the Release
+       Token at the Issuer's Release Endpoint to obtain the ephemeral
+       decryption key.
+
+   4.  *Credential-Format Agnosticism*: Rather than modifying underlying
+       credential formats or their selective disclosure and key-binding
+       mechanisms, this specification acts as an outer cryptographic
+       wrapper around any existing credential presentation format, such
+       as SD-JWT [RFC9901] or ISO mdoc [ISO.18013-5], exposed via a -cr
+       format suffix convention (e.g., dc+sd-jwt-cr, mso_mdoc-cr).
+
+1.2.  Feature Summary
+
+   This specification defines the following core components:
+
+   1.  *Issuer Release Key Provisioning*: Extensions to Credential
+       Issuer Metadata (such as in OpenID for Verifiable Credential
+       Issuance [OpenID4VCI]) allowing an Issuer to publish its *Issuer
+       Release Public Key* (credential_release_encryption_jwks) and
+       *Credential Release Endpoint* (credential_release_endpoint).
+
+   2.  *Conditionally Released Digital Credential (CRDC) Data Format*: A
+       composite JSON structure returned as the Digital Credential
+       presentation response, consisting of:
+
+       *  *Releasable Credential (releasable_credential)*: The standard
+          underlying Digital Credential presentation (e.g., an SD-JWT+KB
+          or an ISO mdoc DeviceResponse) encrypted with a one-time
+          ephemeral AES Content Encryption Key (CEK).
+
+       *  *Release Token (release_token)*: A structure containing the
+          ephemeral CEK encrypted under the Issuer Release Public Key,
+          accompanied by unencrypted routing metadata (such as the iss
+          identifier and key identifier kid) enabling the Verifier to
+          locate the Issuer and redeem the key.
+
+   3.  *Presentation Format Naming Convention (-cr)*: A standardized
+       naming convention appending -cr to existing credential format
+       identifiers (e.g., sd-jwt-cr, dc+sd-jwt-cr, mso_mdoc-cr) for use
+       in presentation protocols such as OpenID4VP.
+
+
+
+Campbell                  Expires 9 April 2027                  [Page 5]
+
+Internet-Draft                    CRDC                      October 2026
+
+
+   4.  *Credential Release Redemption Protocol*: An HTTPS request/
+       response protocol between the Verifier and the Issuer's Release
+       Endpoint whereby the Verifier submits the Release Token, the
+       Issuer authenticates and bills the Verifier, and the Issuer
+       returns the decrypted ephemeral CEK so the Verifier can decrypt
+       and validate the underlying Digital Credential.
+
+1.3.  Conventions and Terminology
+
+   The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT",
+   "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED", "MAY", and
+   "OPTIONAL" in this document are to be interpreted as described in
+   BCP 14 [RFC2119] [RFC8174] when, and only when, they appear in all
+   capitals, as shown here.
+
+   Base64url:  Denotes the URL-safe base64 encoding without padding
+      defined in Section 2 of [RFC7515].
+
+   Digital Credential (DC):  A cryptographically verifiable set of
+      claims issued by an Issuer to a Holder, and its corresponding
+      presentation (including selective disclosures and holder key
+      binding), such as an SD-JWT+KB [RFC9901] or an ISO mdoc
+      DeviceResponse [ISO.18013-5].
+
+   Issuer Release Public Key:  An asymmetric public key provisioned by
+      the Issuer to Credential Managers (e.g., via Issuer metadata in
+      OpenID4VCI) used by the Credential Manager to encrypt the one-time
+      ephemeral Content Encryption Key (CEK) during a presentation.
+
+   Ephemeral Content Encryption Key (CEK):  A single-use,
+      cryptographically random symmetric AES key generated by the
+      Credential Manager for a single presentation to encrypt the
+      underlying Digital Credential presentation.
+
+   Releasable Credential:  The ciphertext structure resulting from
+      encrypting a standard Digital Credential presentation with the
+      one-time ephemeral CEK.
+
+   Release Token:  A cryptographic structure containing the ephemeral
+      CEK encrypted under the Issuer Release Public Key, together with
+      the Issuer metadata (such as the Issuer URL and key identifier)
+      required by the Verifier to locate the Issuer and request key
+      release.
+
+   Conditionally Released Digital Credential (CRDC):  The composite
+      payload returned by the Credential Manager to the Verifier in
+      response to a presentation request, packaging together the
+      *Release Token* and the *Releasable Credential*.
+
+
+
+Campbell                  Expires 9 April 2027                  [Page 6]
+
+Internet-Draft                    CRDC                      October 2026
+
+
+   Credential Release Endpoint:  An HTTPS endpoint operated by the
+      Issuer where a Verifier submits a Release Token to request
+      decryption of the ephemeral CEK, subject to Issuer authorization
+      and billing.
+
+   Issuer:  An entity that issues Digital Credentials to a Holder's
+      Credential Manager, publishes the Issuer Release Public Key, and
+      operates the Credential Release Endpoint.
+
+   Holder:  An entity (typically an end user) that controls Digital
+      Credentials via a Credential Manager and presents them to
+      Verifiers.
+
+   Credential Manager (Wallet):  The user agent, application, or
+      hardware/software component controlled by the Holder that stores
+      Digital Credentials and constructs Conditionally Released Digital
+      Credentials during presentation.
+
+   Verifier:  A relying party that requests a Digital Credential
+      presentation from a Credential Manager, redeems the Release Token
+      at the Issuer's Credential Release Endpoint, decrypts the
+      Releasable Credential, and validates the underlying Digital
+      Credential.
+
+2.  Architecture and Flow Diagram
+
+   Figure 1 illustrates the end-to-end lifecycle of a Conditionally
+   Released Digital Credential across Issuance, Presentation, Release
+   Token Redemption, and Verification.
+
++--------------------+      +--------------------+      +--------------------+
+|                    |      | Credential Manager |      |                    |
+|       Issuer       |      |      (Holder)      |      |      Verifier      |
+|                    |      |                    |      |                    |
++--------------------+      +--------------------+      +--------------------+
+          |                            |                           |
+          | 1. Issue Credential +      |                           |
+          |    Issuer Metadata         |                           |
+          |    (Issuer Release         |                           |
+          |     Public Key, PK_I)      |                           |
+          |--------------------------->|                           |
+          |                            |                           |
+          |                            | 2. Presentation Request   |
+          |                            |    (e.g., OpenID4VP over  |
+          |                            |     DC API, format *-cr)  |
+          |                            |<--------------------------|
+          |                            |                           |
+          |                            | 3. Generate normal DC     |
+
+
+
+Campbell                  Expires 9 April 2027                  [Page 7]
+
+Internet-Draft                    CRDC                      October 2026
+
+
+          |                            |    presentation (DC_pres) |
+          |                            |    & ephemeral AES key K  |
+          |                            |                           |
+          |                            | 4. Encrypt DC_pres with K |
+          |                            |    -> Releasable Cred     |
+          |                            |    Encrypt K with PK_I +  |
+          |                            |    Issuer metadata        |
+          |                            |    -> Release Token       |
+          |                            |                           |
+          |                            | 5. Return CRDC            |
+          |                            |    (Release Token +       |
+          |                            |     Releasable Cred)      |
+          |                            |-------------------------->|
+          |                            |                           |
+          | 6. Inspect Release Token metadata to identify Issuer   |
+          |    & send Release Token to Issuer Release Endpoint     |
+          |<-------------------------------------------------------|
+          |                            |                           |
+          | 7. Authenticate & bill Verifier;                       |
+          |    decrypt Release Token with SK_I to recover K;       |
+          |    return ephemeral AES key K to Verifier              |
+          |------------------------------------------------------->|
+          |                            |                           |
+          |                            | 8. Decrypt Releasable     |
+          |                            |    Credential using K     |
+          |                            |    -> recover DC_pres     |
+          |                            |                           |
+          |                            | 9. Validate DC_pres       |
+          |                            |    as normal              |
+          +                            +                           +
+
+    Figure 1: Conditionally Released Digital Credential Issuance,
+                    Presentation, and Release Flow
+
+3.  Concepts
+
+   This section describes the core components and lifecycle of
+   Conditionally Released Digital Credentials at a conceptual level,
+   prior to the normative data formats specified in Section 4.
+
+3.1.  Issuer Release Public Key Provisioning
+
+   During credential issuance (for example, using OpenID for Verifiable
+   Credential Issuance [OpenID4VCI]), or via discoverable Issuer
+   metadata, the Issuer provides the Credential Manager with an
+   asymmetric public key termed the *Issuer Release Public Key* (PK_I),
+   along with the Issuer's identifier (iss) and optionally a Credential
+   Release Endpoint URL.
+
+
+
+Campbell                  Expires 9 April 2027                  [Page 8]
+
+Internet-Draft                    CRDC                      October 2026
+
+
+   When an Issuer marks an issued credential as requiring conditional
+   release, the Credential Manager stores the Issuer Release Public Key
+   and Issuer metadata alongside the credential.  To preserve Holder
+   unlinkability, the Issuer MUST provision the same Issuer Release
+   Public Key across a sufficiently large cohort of Holders and
+   credentials (see Section 8.1).
+
+3.2.  Releasable Credential and Release Token
+
+   When a Verifier requests a credential presentation from the
+   Credential Manager (e.g., via OpenID4VP over the W3C Digital
+   Credentials API), the Credential Manager first constructs the
+   standard presentation payload for the underlying credential
+   format—including any Holder-selected disclosures and cryptographic
+   Holder key binding (such as an SD-JWT+KB or an ISO mdoc
+   DeviceResponse bound to the Verifier's nonce and aud/client_id).
+
+   Instead of returning this cleartext presentation directly to the
+   Verifier, the Credential Manager performs a two-part wrapping
+   operation:
+
+   1.  *Constructing the Releasable Credential*: The Credential Manager
+       generates a fresh, single-use ephemeral symmetric AES Content
+       Encryption Key (K).  It encrypts the serialized Digital
+       Credential presentation under K using an authenticated encryption
+       with associated data (AEAD) algorithm.  The resulting ciphertext
+       structure is the *Releasable Credential*.
+
+   2.  *Constructing the Release Token*: The Credential Manager encrypts
+       the ephemeral AES key K using the Issuer's *Issuer Release Public
+       Key* (PK_I).  This encrypted key is packaged into a structure
+       called the *Release Token*, which includes plaintext metadata
+       identifying the Issuer (iss), the key identifier (kid), and
+       optional release endpoint or credential type metadata so the
+       Verifier knows where and how to redeem the token.
+
+3.3.  Conditionally Released Digital Credential (CRDC)
+
+   The Credential Manager packages the *Release Token* and the
+   *Releasable Credential* together into a composite envelope called the
+   *Conditionally Released Digital Credential (CRDC)* and returns it to
+   the Verifier as the Digital Credential response.
+
+   From the perspective of presentation protocols such as OpenID4VP, a
+   Conditionally Released Digital Credential can be negotiated as a
+   distinct credential format wrapper derived from the underlying format
+   by appending the -cr suffix (for example, dc+sd-jwt-cr or mso_mdoc-
+   cr).
+
+
+
+Campbell                  Expires 9 April 2027                  [Page 9]
+
+Internet-Draft                    CRDC                      October 2026
+
+
+3.4.  Credential Release Redemption and Verification
+
+   Upon receiving a Conditionally Released Digital Credential, the
+   Verifier cannot immediately inspect or verify the underlying
+   credential claims because they are encrypted within the Releasable
+   Credential under the ephemeral AES key K.  To unlock the credential,
+   the Verifier performs the following steps:
+
+   1.  *Inspect Metadata*: The Verifier inspects the unencrypted
+       metadata in the *Release Token* to identify the Issuer (and, via
+       Issuer metadata discovery or an explicit claim, the Issuer's
+       Credential Release Endpoint).
+
+   2.  *Request Release from Issuer*: The Verifier sends the *Release
+       Token* in an authenticated request to the Issuer's Credential
+       Release Endpoint, requesting that the presentation key be
+       released.
+
+   3.  *Issuer Approval and Billing*: The Issuer authenticates the
+       Verifier, verifies that the Verifier is authorized to receive
+       presentations, and optionally records a billable event or deducts
+       from the Verifier's quota.  If approved, the Issuer uses its
+       private key (SK_I) corresponding to the Issuer Release Public Key
+       (PK_I) to decrypt the Release Token, recovering the one-time
+       ephemeral AES key K, and returns K to the Verifier over the TLS-
+       protected channel.
+
+   4.  *Decrypt Releasable Credential*: The Verifier uses the returned
+       AES key K to decrypt the *Releasable Credential*, revealing the
+       underlying Digital Credential presentation.
+
+   5.  *Standard Credential Validation*: The Verifier validates the
+       underlying Digital Credential presentation exactly as specified
+       by its native format (e.g., verifying the Issuer signature,
+       Holder key binding, disclosures, validity period, and Verifier
+       nonce/audience binding).
+
+   Crucially, during Step 2 and Step 3, the Issuer only ever sees the
+   Verifier's identity and the *Release Token* (which wraps a random
+   ephemeral key K generated by the Credential Manager at presentation
+   time).  The Issuer never sees the Releasable Credential, any
+   credential claims, or any identifier tied to the Holder or issuance
+   transaction.
+
+4.  Data Formats and Cryptographic Wrapper
+
+
+
+
+
+
+Campbell                  Expires 9 April 2027                 [Page 10]
+
+Internet-Draft                    CRDC                      October 2026
+
+
+4.1.  Issuer Metadata Parameters
+
+   Issuers supporting Conditionally Released Digital Credentials
+   advertise their conditional release parameters in their Credential
+   Issuer Metadata (for example, the Credential Issuer Metadata document
+   defined in [OpenID4VCI] or OAuth Authorization Server Metadata
+   [RFC8414]).
+
+   The following metadata parameters are defined:
+
+   credential_release_endpoint:  REQUIRED.  URL of the Issuer's
+      Credential Release Endpoint where Verifiers send Release Tokens to
+      obtain the decrypted ephemeral key.  This URL MUST use the https
+      scheme.
+
+   credential_release_encryption_jwks:  REQUIRED (unless
+      credential_release_encryption_jwks_uri is provided).  A JSON Web
+      Key Set (JWKS) [RFC7517] containing one or more *Issuer Release
+      Public Keys* used by Credential Managers to encrypt ephemeral
+      Content Encryption Keys into Release Tokens.  Each JWK MUST
+      contain a kid (Key ID), kty (Key Type), use set to "enc", and an
+      alg (Algorithm) parameter (e.g., "ECDH-ES", "ECDH-ES+A256KW", or
+      "RSA-OAEP-256").
+
+   credential_release_encryption_jwks_uri:  OPTIONAL.  An HTTPS URL
+      referencing a JWKS document containing the Issuer's *Issuer
+      Release Public Keys*.
+
+   credential_release_required:  OPTIONAL.  A boolean value inside a
+      specific credential configuration object in Issuer metadata
+      indicating whether presentations of this credential MUST be
+      wrapped as a Conditionally Released Digital Credential.  Defaults
+      to false if omitted.
+
+4.2.  Releasable Credential Format
+
+   The *Releasable Credential* represents the underlying Digital
+   Credential presentation encrypted under the one-time ephemeral AES
+   key K (the Content Encryption Key, or CEK).
+
+   To construct the Releasable Credential:
+
+   1.  The Credential Manager produces the standard Digital Credential
+       presentation in its native format (e.g., a UTF-8 string for an
+       SD-JWT+KB compact serialization, or raw CBOR bytes for an ISO/IEC
+       18013-5 DeviceResponse).
+
+
+
+
+
+Campbell                  Expires 9 April 2027                 [Page 11]
+
+Internet-Draft                    CRDC                      October 2026
+
+
+   2.  The Credential Manager generates a fresh, cryptographically
+       random symmetric AES Content Encryption Key K of length 256 bits
+       (32 octets) (or 128 bits if A128GCM is used) and a random 96-bit
+       (12-octet) Initialization Vector (IV).
+
+   3.  The Credential Manager encrypts the raw octets of the underlying
+       Digital Credential presentation using AES-GCM (A256GCM REQUIRED,
+       A128GCM OPTIONAL) [RFC7518].
+
+   4.  To cryptographically bind the Releasable Credential to the
+       Release Token and prevent mix-and-match substitution attacks, the
+       ASCII bytes of the compact *Release Token* (defined in
+       Section 4.3) MUST be passed as the Additional Authenticated Data
+       (AAD) to the AES-GCM encryption operation.
+
+   The releasable_credential is represented as a JSON object with the
+   following members:
+
+   enc:  REQUIRED.  The symmetric content encryption algorithm used to
+      encrypt the underlying credential presentation.  MUST be a
+      registered JWE "enc" algorithm name from [RFC7518], with "A256GCM"
+      as the default and Mandatory-to-Implement (MTI) algorithm.
+
+   iv:  REQUIRED.  The base64url-encoded Initialization Vector (nonce)
+      used for the AEAD encryption (12 octets for AES-GCM).
+
+   ciphertext:  REQUIRED.  The base64url-encoded AEAD ciphertext of the
+      underlying Digital Credential presentation.
+
+   tag:  REQUIRED.  The base64url-encoded Authentication Tag produced by
+      the AEAD encryption (16 octets for AES-GCM).
+
+4.3.  Release Token Format
+
+   The *Release Token* encapsulates the one-time ephemeral AES key K
+   encrypted under the *Issuer Release Public Key*, along with the
+   Issuer metadata needed by the Verifier to locate the Issuer and
+   redeem the token.
+
+   The Release Token is serialized as a JSON Web Encryption (JWE)
+   Compact Serialization string [RFC7516] whose plaintext payload
+   contains the ephemeral AES key K.
+
+4.3.1.  Release Token JWE Protected Header
+
+   The JWE Protected Header of the Release Token MUST contain the
+   following parameters:
+
+
+
+
+Campbell                  Expires 9 April 2027                 [Page 12]
+
+Internet-Draft                    CRDC                      October 2026
+
+
+   alg:  REQUIRED.  The asymmetric key encryption / key agreement
+      algorithm used to encrypt the ephemeral key K under the Issuer
+      Release Public Key (e.g., "ECDH-ES+A256KW", "ECDH-ES", or "RSA-
+      OAEP-256"), or an HPKE-based JWE algorithm [RFC9180].  "ECDH-
+      ES+A256KW" with curve "P-256" is Mandatory-to-Implement (MTI).
+
+   enc:  REQUIRED.  The content encryption algorithm used inside the JWE
+      to encrypt the payload containing K (e.g., "A256GCM").
+
+   typ:  REQUIRED.  Media type of the Release Token.  MUST be "crdc-
+      release+jwe".
+
+   kid:  REQUIRED.  The Key Identifier of the *Issuer Release Public
+      Key* used to encrypt the Release Token.
+
+   iss:  REQUIRED.  The Issuer identifier (an HTTPS URL with no query or
+      fragment components) identifying the Issuer that issued the
+      underlying Digital Credential and that can decrypt this Release
+      Token.
+
+   cr_ep:  OPTIONAL.  The HTTPS URL of the Issuer's Credential Release
+      Endpoint (credential_release_endpoint).  Including cr_ep allows
+      the Verifier to contact the Release Endpoint directly, though the
+      Verifier SHOULD validate it against discovered Issuer metadata for
+      iss.
+
+   Note: When using "alg": "ECDH-ES" or "ECDH-ES+A256KW", the JWE
+   Protected Header also includes the standard "epk" (Ephemeral Public
+   Key) parameter generated by the Credential Manager for this single
+   presentation.
+
+4.3.2.  Release Token Plaintext Payload
+
+   The plaintext encrypted inside the Release Token JWE MUST be a UTF-8
+   encoded JSON object containing at least the following members:
+
+   k:  REQUIRED.  The base64url-encoded raw octets of the one-time
+      ephemeral AES Content Encryption Key K used to encrypt the
+      releasable_credential.
+
+   enc:  REQUIRED.  The symmetric algorithm identifier (e.g., "A256GCM")
+      with which K is used.
+
+4.4.  Conditionally Released Digital Credential (CRDC) Envelope
+
+   The *Conditionally Released Digital Credential (CRDC)* is the top-
+   level JSON object returned by the Credential Manager to the Verifier
+   in the presentation response.  It contains the following fields:
+
+
+
+Campbell                  Expires 9 April 2027                 [Page 13]
+
+Internet-Draft                    CRDC                      October 2026
+
+
+   format:  REQUIRED.  The presentation format identifier indicating a
+      conditionally released credential (e.g., "dc+sd-jwt-cr" or
+      "mso_mdoc-cr"), or the underlying credential format identifier
+      when the outer protocol already signals the -cr format.
+
+   release_token:  REQUIRED.  The JWE Compact Serialization string
+      representing the Release Token (as defined in Section 4.3).
+
+   releasable_credential:  REQUIRED.  The JSON object representing the
+      encrypted Digital Credential presentation (as defined in
+      Section 4.2).
+
+   Example CRDC structure:
+
+   {
+     "format": "dc+sd-jwt-cr",
+     "release_token": "eyJhbGciOiJFQ0RILUVTK0EyNTZLVyIsImVuYyI6IkEyNTZHQ00iLCJ0eXAiOiJjcmRjLXJlbGVhc2UranVlIiwia2lkIjoiaXNzdWVyLXJlbGVhc2Uta2V5LTIwMjYiLCJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlLmNvbSJ9...",
+     "releasable_credential": {
+       "enc": "A256GCM",
+       "iv": "3p7bfXt93p7bfXt9",
+       "ciphertext": "8f3d9a7b6c5e4f3a2b1c0d9e8f7a6b5c...",
+       "tag": "1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d"
+     }
+   }
+
+4.5.  Presentation Format Identifiers (-cr Suffix Convention)
+
+   When used with presentation protocols that negotiate credential
+   formats (such as OpenID4VP [OpenID4VP] and the W3C Digital
+   Credentials API [W3C.DC-API]), a Conditionally Released Digital
+   Credential format identifier is constructed by appending the suffix
+   *-cr* to the underlying credential format identifier:
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Campbell                  Expires 9 April 2027                 [Page 14]
+
+Internet-Draft                    CRDC                      October 2026
+
+
+    +====================+===================+========================+
+    | Underlying         | Underlying Format | Conditionally Released |
+    | Credential Format  | Identifier        | Format Identifier      |
+    +====================+===================+========================+
+    | SD-JWT VC          | dc+sd-jwt (or     | dc+sd-jwt-cr (or       |
+    | [SD-JWT-VC]        | vc+sd-jwt)        | vc+sd-jwt-cr)          |
+    +--------------------+-------------------+------------------------+
+    | Bare SD-JWT        | sd-jwt            | sd-jwt-cr              |
+    | [RFC9901]          |                   |                        |
+    +--------------------+-------------------+------------------------+
+    | ISO/IEC 18013-5    | mso_mdoc          | mso_mdoc-cr            |
+    | mdoc [ISO.18013-5] |                   |                        |
+    +--------------------+-------------------+------------------------+
+    | W3C Verifiable     | jwt_vc_json /     | jwt_vc_json-cr /       |
+    | Credentials        | ldp_vc            | ldp_vc-cr              |
+    +--------------------+-------------------+------------------------+
+
+                                  Table 1
+
+   When a Verifier includes a -cr format identifier in its presentation
+   request (or indicates support for conditional release), a Credential
+   Manager holding a credential that requires conditional release
+   returns the CRDC JSON envelope defined in Section 4.4.
+
+5.  Protocol Flow and Processing Rules
+
+5.1.  Issuance and Key Discovery
+
+   1.  *Issuer Key Generation*: The Issuer generates one or more
+       asymmetric key pairs (PK_I, SK_I) designated as *Issuer Release
+       Keys* and publishes the public keys (PK_I) in
+       credential_release_encryption_jwks alongside its
+       credential_release_endpoint in its Issuer Metadata.
+
+   2.  *Provisioning to Credential Manager*: During credential issuance
+       (e.g., via OpenID4VCI), the Credential Manager retrieves and
+       caches the Issuer's credential_release_encryption_jwks and iss
+       identifier associated with the issued Digital Credential.  The
+       Credential Manager SHOULD periodically refresh the Issuer's
+       release public keys in accordance with HTTP cache headers, using
+       anonymous network transport (e.g., Oblivious HTTP [RFC9458] or
+       proxy) if key rotation fetches occur post-issuance.
+
+5.2.  Presentation by the Credential Manager
+
+   When the Credential Manager receives a presentation request from a
+   Verifier for a credential configured for conditional release, the
+   Credential Manager MUST perform the following steps:
+
+
+
+Campbell                  Expires 9 April 2027                 [Page 15]
+
+Internet-Draft                    CRDC                      October 2026
+
+
+   1.  *Generate Underlying Presentation*: Construct the native Digital
+       Credential presentation (DC_pres) according to the rules of the
+       underlying credential format and presentation protocol.
+       Crucially, any cryptographic Holder Key Binding (e.g., the Key
+       Binding JWT in SD-JWT+KB or DeviceAuth in ISO mdoc) MUST bind to
+       the Verifier's nonce and aud/client_id inside the inner DC_pres
+       prior to encryption.
+
+   2.  *Generate Ephemeral AES Key*: Generate a fresh, cryptographically
+       random 256-bit AES key K and a 96-bit random IV using a
+       cryptographically secure pseudorandom number generator (CSPRNG)
+       [RFC4086].  K MUST NOT be reused across presentations.
+
+   3.  *Create Release Token*:
+
+       *  Construct the Release Token plaintext JSON object {"k":
+          base64url(K), "enc": "A256GCM"}.
+
+       *  Construct the JWE Protected Header containing "alg", "enc",
+          "typ": "crdc-release+jwe", "kid", and "iss" (set to the
+          Issuer's identifier URL).
+
+       *  Encrypt the plaintext under the Issuer's *Issuer Release
+          Public Key* (PK_I) to produce the JWE Compact Serialization
+          string release_token.
+
+   4.  *Create Releasable Credential*:
+
+       *  Encrypt the raw octets of DC_pres using AES-256-GCM with key
+          K, initialization vector IV, and Additional Authenticated Data
+          (AAD) set to the ASCII bytes of release_token.
+
+       *  Construct the releasable_credential JSON object containing
+          enc, iv, ciphertext, and tag.
+
+   5.  *Return CRDC*: Package format, release_token, and
+       releasable_credential into the CRDC JSON object and return it to
+       the Verifier via the presentation protocol (e.g., over the W3C
+       Digital Credentials API).
+
+5.3.  Release Token Redemption (Verifier to Issuer)
+
+   When a Verifier receives a Conditionally Released Digital Credential
+   (CRDC), it MUST perform the following steps to obtain the ephemeral
+   decryption key:
+
+
+
+
+
+
+Campbell                  Expires 9 April 2027                 [Page 16]
+
+Internet-Draft                    CRDC                      October 2026
+
+
+   1.  *Parse Release Token Header*: Base64url-decode the JWE Protected
+       Header of release_token and extract the iss claim (and optional
+       cr_ep claim).
+
+   2.  *Resolve Release Endpoint*: Determine the Issuer's
+       credential_release_endpoint from the Verifier's pre-configured
+       trust store or by fetching the Issuer Metadata from iss (e.g.,
+       /.well-known/openid-credential-issuer).  The Verifier MUST verify
+       that iss is a trusted Issuer before sending a request.
+
+   3.  *Send Release Request*: Send an HTTP POST request to the Issuer's
+       credential_release_endpoint with content type application/json.
+       The Verifier MUST authenticate itself to the Issuer (for example,
+       using an OAuth 2.0 Bearer access token [RFC6750], mutual TLS
+       [RFC8705], or private_key_jwt client authentication).  The
+       request body MUST be a JSON object containing:
+
+       *  release_token: REQUIRED.  The exact release_token string
+          received in the CRDC.
+
+   Example Release Request:
+
+   POST /release HTTP/1.1
+   Host: issuer.example.com
+   Authorization: Bearer eyJhbGciOiJSUzI1NiIs...
+   Content-Type: application/json
+
+   {
+     "release_token": "eyJhbGciOiJFQ0RILUVTK0EyNTZLVyIsImVuYyI6IkEyNTZHQ00i..."
+   }
+
+   1.  *Issuer Processing and Approval*: Upon receiving the request at
+       credential_release_endpoint, the Issuer:
+
+       *  Authenticates the Verifier and verifies that the Verifier has
+          an active commercial/trust relationship and sufficient quota
+          or billing authorization.
+
+       *  Looks up the private key (SK_I) corresponding to the kid in
+          the JWE Protected Header of release_token.
+
+       *  Decrypts and verifies the integrity of release_token using
+          SK_I.  If decryption fails, the Issuer MUST return an HTTP 400
+          Bad Request error with error code "invalid_release_token" and
+          MUST NOT bill the Verifier.
+
+       *  Records the billable transaction against the Verifier's
+          account.
+
+
+
+Campbell                  Expires 9 April 2027                 [Page 17]
+
+Internet-Draft                    CRDC                      October 2026
+
+
+       *  Returns an HTTP 200 OK response with Content-Type:
+          application/json and Cache-Control: no-store containing the
+          released key object (k and enc).
+
+   Example Release Response:
+
+   HTTP/1.1 200 OK
+   Content-Type: application/json
+   Cache-Control: no-store
+
+   {
+     "k": "f83j2k1l0m9n8b7v6c5x4z3a2s1d0f9g8h7j6k5l4m3",
+     "enc": "A256GCM"
+   }
+
+5.4.  Unwrapping and Verification by the Verifier
+
+   Upon receiving the HTTP 200 OK response from the Issuer's Credential
+   Release Endpoint, the Verifier MUST perform the following steps:
+
+   1.  *Extract Ephemeral Key*: Base64url-decode the k parameter from
+       the Issuer's response to obtain the symmetric AES key K.
+
+   2.  *Decrypt Releasable Credential*: Using key K, the iv, ciphertext,
+       and tag from releasable_credential, and the ASCII bytes of
+       release_token as the AAD, perform AES-GCM authenticated
+       decryption.  If decryption or tag verification fails, the
+       Verifier MUST abort processing and reject the presentation.
+
+   3.  *Validate Underlying Digital Credential*: Parse the decrypted
+       plaintext as the underlying Digital Credential presentation
+       (DC_pres, e.g., an SD-JWT+KB or ISO mdoc DeviceResponse) and
+       perform all standard validation checks required by the underlying
+       format and presentation protocol, including:
+
+       *  Verifying the Issuer's cryptographic signature on the
+          credential using the Issuer's signing public key.
+
+       *  Verifying that the Issuer of the inner credential matches the
+          iss in the outer release_token header.
+
+       *  Verifying Holder Key Binding (kb+jwt or DeviceAuth), ensuring
+          that the nonce and aud/client_id match the Verifier's
+          presentation request.
+
+       *  Verifying selectively disclosed claims and credential
+          validity/revocation status.
+
+
+
+
+Campbell                  Expires 9 April 2027                 [Page 18]
+
+Internet-Draft                    CRDC                      October 2026
+
+
+6.  Examples
+
+6.1.  Issuer Metadata Example
+
+   The following non-normative example shows an Issuer publishing its
+   credential_release_endpoint and credential_release_encryption_jwks
+   inside its Credential Issuer Metadata:
+
+   {
+     "credential_issuer": "https://issuer.example.com",
+     "credential_endpoint": "https://issuer.example.com/credential",
+     "credential_release_endpoint": "https://issuer.example.com/release",
+     "credential_release_encryption_jwks": {
+       "keys": [
+         {
+           "kty": "EC",
+           "crv": "P-256",
+           "use": "enc",
+           "alg": "ECDH-ES+A256KW",
+           "kid": "issuer-release-key-2026-q4",
+           "x": "f83OJ3D2xF1Bg8vub9tLe1gHMzV76e8Tus9uPHvRVEU",
+           "y": "x_FEzRu9m36HLN_tue659LNpXW6pCyStikYjKIWI5a0"
+         }
+       ]
+     }
+   }
+
+6.2.  Conditionally Released SD-JWT (dc+sd-jwt-cr)
+
+   When wrapping an SD-JWT+KB presentation (<Issuer-signed
+   JWT>~<Disclosure 1>~...~<KB-JWT>), the Credential Manager encrypts
+   the UTF-8 octets of the complete SD-JWT+KB string into
+   releasable_credential and returns:
+
+   {
+     "format": "dc+sd-jwt-cr",
+     "release_token": "eyJhbGciOiJFQ0RILUVTK0EyNTZLVyIsImVuYyI6IkEyNTZHQ00iLCJ0eXAiOiJjcmRjLXJlbGVhc2UranVlIiwia2lkIjoiaXNzdWVyLXJlbGVhc2Uta2V5LTIwMjYtcTQiLCJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlLmNvbSIsImVwayI6eyJrdHkiOiJFQyIsImNydiI6IlAtMjU2IiwieCI6IjI5c19HVjB4Li4uIiwieSI6IjhsMl9IUjB5Li4uIn19.dGhpcy1pcy10aGUtencrypted-cek.aXYtYnl0ZXM.Y2lwaGVydGV4dC1ieXRlcw.dGFnLWJ5dGVz",
+     "releasable_credential": {
+       "enc": "A256GCM",
+       "iv": "MTIzNDU2Nzg5MDEy",
+       "ciphertext": "V2hlbiBkZWNyeXB0ZWQsIHRoaXMgaXMgdGhlIGZ1bGwgU0QtSldUK0tCIHN0cmluZyh...",
+       "tag": "YWJjZGVmZ2hpamtsbW5vcA"
+     }
+   }
+
+
+
+
+
+
+
+Campbell                  Expires 9 April 2027                 [Page 19]
+
+Internet-Draft                    CRDC                      October 2026
+
+
+6.3.  Conditionally Released ISO mdoc (mso_mdoc-cr)
+
+   When wrapping an ISO/IEC 18013-5 DeviceResponse CBOR structure, the
+   Credential Manager encrypts the raw CBOR octets of DeviceResponse
+   into releasable_credential and sets "format": "mso_mdoc-cr".  Upon
+   decrypting releasable_credential.ciphertext, the Verifier obtains the
+   exact CBOR bytes of DeviceResponse and validates the IssuerAuth
+   COSE_Sign1 and DeviceAuth structures as normal.
+
+7.  Security Considerations
+
+7.1.  Ephemeral Key Entropy and Nonce Uniqueness
+
+   The security of the Releasable Credential relies on the
+   unpredictability of the one-time ephemeral AES key K.  Credential
+   Managers MUST generate a fresh, cryptographically random key K and IV
+   for every presentation.  Reusing K across presentations would allow a
+   Verifier that paid for one presentation to decrypt another
+   presentation without Issuer approval, and would enable correlation
+   across presentations.
+
+7.2.  Binding Between Releasable Credential and Release Token
+
+   By passing the ASCII representation of release_token as Additional
+   Authenticated Data (AAD) when encrypting releasable_credential, the
+   two structures are cryptographically bound.  An attacker cannot strip
+   a release_token from one CRDC and attach it to a different
+   releasable_credential without causing AEAD tag verification to fail.
+
+7.3.  Inner Issuer Verification Against Outer Release Token Issuer
+
+   A malicious Issuer M could attempt to wrap a credential issued by
+   honest Issuer H under M's Release Public Key in order to collect fees
+   meant for H.  To prevent this, as specified in Section 5.4, the
+   Verifier MUST verify after decrypting the Releasable Credential that
+   the cryptographic Issuer of the inner Digital Credential matches the
+   iss claimed in the outer release_token JWE Protected Header.
+
+7.4.  Inner Holder Key Binding
+
+   The CRDC wrapper provides conditional confidentiality of the
+   presentation until Issuer approval, but does not replace the inner
+   credential's Holder Key Binding.  The inner Digital Credential
+   presentation (e.g., SD-JWT+KB or mdoc DeviceResponse) MUST still
+   include cryptographic Holder Key Binding over the Verifier's nonce
+   and aud/client_id.  This ensures that even after decryption, the
+   Verifier has cryptographic proof that the Holder consented to present
+   the credential to that specific Verifier in that specific session.
+
+
+
+Campbell                  Expires 9 April 2027                 [Page 20]
+
+Internet-Draft                    CRDC                      October 2026
+
+
+8.  Privacy Considerations
+
+8.1.  Unlinkability Against the Issuer (Shared Key Cohort Requirements)
+
+   The primary privacy guarantee of Conditionally Released Digital
+   Credentials is that the Issuer can authorize and bill a Verifier for
+   a presentation without learning which Holder's credential is being
+   presented.
+
+   To uphold this guarantee:
+
+   1.  *No Per-Holder Release Keys*: The Issuer MUST NOT provision
+       unique or fine-grained *Issuer Release Public Keys* (PK_I / kid)
+       to individual Holders or small cohorts of Holders.  If an Issuer
+       assigned a distinct PK_I to each Holder, the kid (or successful
+       trial decryption) at the Release Endpoint would immediately
+       reveal which Holder is presenting their credential to the
+       Verifier.  Issuers MUST share each Issuer Release Public Key
+       across a large anonymity cohort (e.g., all credentials of a given
+       type issued within a broad time window).
+
+   2.  *No Holder-Identifying Metadata in the Release Token*: The
+       Credential Manager MUST NOT include any Holder identifier,
+       credential serial number, issuance timestamp, or static salt
+       inside either the JWE Protected Header or the encrypted payload
+       of the release_token.  Both the ephemeral asymmetric key (epk)
+       used in JWE key agreement and the ephemeral symmetric key (K)
+       inside the JWE payload MUST be freshly generated at presentation
+       time.
+
+8.2.  Confidentiality of Claims Against the Issuer
+
+   Because the Verifier only sends the release_token to the Issuer's
+   Release Endpoint and never sends the releasable_credential, the
+   Issuer never sees the underlying credential, the Holder's selectively
+   disclosed claims, or the Verifier's session nonce.
+
+8.3.  Timing and Network Correlation Mitigations
+
+   If an Issuer issues a credential to a Holder and the Holder
+   immediately presents that credential to a Verifier milliseconds
+   later, the Issuer could attempt to correlate the issuance event with
+   the Verifier's Release Token redemption by timing alone.  Credential
+   Managers SHOULD pre-provision credentials and Issuer Release Public
+   Keys ahead of presentation time, or introduce jitter when issuance
+   and presentation occur back-to-back.
+
+
+
+
+
+Campbell                  Expires 9 April 2027                 [Page 21]
+
+Internet-Draft                    CRDC                      October 2026
+
+
+9.  IANA Considerations
+
+9.1.  OAuth Authorization Server / Credential Issuer Metadata Registry
+
+   This specification requests registration of the following metadata
+   parameters:
+
+   *  credential_release_endpoint: URL of the Issuer's Credential
+      Release Endpoint.
+
+   *  credential_release_encryption_jwks: JWKS containing the Issuer
+      Release Public Keys.
+
+   *  credential_release_encryption_jwks_uri: URL of the JWKS containing
+      the Issuer Release Public Keys.
+
+9.2.  Media Type Registration
+
+   This section registers the "application/crdc-release+jwe" media type
+   (typ shorthand "crdc-release+jwe") in the IANA "Media Types" registry
+   to identify a Release Token JWE.
+
+10.  References
+
+10.1.  Normative References
+
+   [RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
+              Requirement Levels", BCP 14, RFC 2119,
+              DOI 10.17487/RFC2119, March 1997,
+              <https://www.rfc-editor.org/rfc/rfc2119>.
+
+   [RFC4086]  Eastlake 3rd, D., Schiller, J., and S. Crocker,
+              "Randomness Requirements for Security", BCP 106, RFC 4086,
+              DOI 10.17487/RFC4086, June 2005,
+              <https://www.rfc-editor.org/rfc/rfc4086>.
+
+   [RFC7515]  Jones, M., Bradley, J., and N. Sakimura, "JSON Web
+              Signature (JWS)", RFC 7515, DOI 10.17487/RFC7515, May
+              2015, <https://www.rfc-editor.org/rfc/rfc7515>.
+
+   [RFC7516]  Jones, M. and J. Hildebrand, "JSON Web Encryption (JWE)",
+              RFC 7516, DOI 10.17487/RFC7516, May 2015,
+              <https://www.rfc-editor.org/rfc/rfc7516>.
+
+   [RFC7517]  Jones, M., "JSON Web Key (JWK)", RFC 7517,
+              DOI 10.17487/RFC7517, May 2015,
+              <https://www.rfc-editor.org/rfc/rfc7517>.
+
+
+
+
+Campbell                  Expires 9 April 2027                 [Page 22]
+
+Internet-Draft                    CRDC                      October 2026
+
+
+   [RFC7518]  Jones, M., "JSON Web Algorithms (JWA)", RFC 7518,
+              DOI 10.17487/RFC7518, May 2015,
+              <https://www.rfc-editor.org/rfc/rfc7518>.
+
+   [RFC8174]  Leiba, B., "Ambiguity of Uppercase vs Lowercase in RFC
+              2119 Key Words", BCP 14, RFC 8174, DOI 10.17487/RFC8174,
+              May 2017, <https://www.rfc-editor.org/rfc/rfc8174>.
+
+   [RFC9901]  Fett, D., Yasuda, K., and B. Campbell, "Selective
+              Disclosure for JSON Web Tokens", RFC 9901,
+              DOI 10.17487/RFC9901, November 2025,
+              <https://www.rfc-editor.org/rfc/rfc9901>.
+
+10.2.  Informative References
+
+   [ISO.18013-5]
+              ISO/IEC, "Personal identification — ISO-compliant driving
+              licence — Part 5: Mobile driving licence (mDL)
+              application", ISO/IEC 18013-5:2021, September 2021.
+
+   [OpenID4VCI]
+              Lodderstedt, T., Yasuda, K., and T. Looker, "OpenID for
+              Verifiable Credential Issuance", 2025,
+              <https://openid.net/specs/openid-4-verifiable-credential-
+              issuance-1_0.html>.
+
+   [OpenID4VP]
+              Terbu, O., Lodderstedt, T., Yasuda, K., and T. Looker,
+              "OpenID for Verifiable Presentations", 2025,
+              <https://openid.net/specs/openid-4-verifiable-
+              presentations-1_0.html>.
+
+   [RFC6750]  Jones, M. and D. Hardt, "The OAuth 2.0 Authorization
+              Framework: Bearer Token Usage", RFC 6750,
+              DOI 10.17487/RFC6750, October 2012,
+              <https://www.rfc-editor.org/rfc/rfc6750>.
+
+   [RFC8414]  Jones, M., Sakimura, N., and J. Bradley, "OAuth 2.0
+              Authorization Server Metadata", RFC 8414,
+              DOI 10.17487/RFC8414, June 2018,
+              <https://www.rfc-editor.org/rfc/rfc8414>.
+
+   [RFC8705]  Campbell, B., Bradley, J., Sakimura, N., and T.
+              Lodderstedt, "OAuth 2.0 Mutual-TLS Client Authentication
+              and Certificate-Bound Access Tokens", RFC 8705,
+              DOI 10.17487/RFC8705, February 2020,
+              <https://www.rfc-editor.org/rfc/rfc8705>.
+
+
+
+
+Campbell                  Expires 9 April 2027                 [Page 23]
+
+Internet-Draft                    CRDC                      October 2026
+
+
+   [RFC9180]  Barnes, R., Bhargavan, K., Lipp, B., and C. Wood, "Hybrid
+              Public Key Encryption", RFC 9180, DOI 10.17487/RFC9180,
+              February 2022, <https://www.rfc-editor.org/rfc/rfc9180>.
+
+   [RFC9458]  Thomson, M. and C. A. Wood, "Oblivious HTTP", RFC 9458,
+              DOI 10.17487/RFC9458, January 2024,
+              <https://www.rfc-editor.org/rfc/rfc9458>.
+
+   [SD-JWT-VC]
+              Terbu, O., Fett, D., and B. Campbell, "SD-JWT-based
+              Verifiable Credentials (SD-JWT VC)", 2025,
+              <https://datatracker.ietf.org/doc/draft-ietf-oauth-sd-jwt-
+              vc/>.
+
+   [W3C.DC-API]
+              Caceres, M., Yasuda, K., and S. Goto, "Digital
+              Credentials", 2025,
+              <https://wicg.github.io/digital-credentials/>.
+
+Author's Address
+
+   Lee Campbell
+   Google
+   Email: leecam@google.com
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Campbell                  Expires 9 April 2027                 [Page 24]
